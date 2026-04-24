@@ -1,15 +1,51 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit } from '@nestjs/common';
 import { XfsManagerService } from './xfs-manager.service';
 import { XfsGateway } from './xfs.gateway';
 import { XfsController } from './xfs.controller';
+import {
+  CdmDeviceService,
+  IdcDeviceService,
+  PinDeviceService,
+  PtrDeviceService,
+} from '@atm/xfs-devices';
 
 /**
- * XFS module — Phase 1 scaffolds the Manager, Gateway, and REST controller.
- * Device providers (IDC, PIN, CDM, PTR) are registered in Phase 2.
+ * XFS module.
+ *
+ * All four virtual devices (IDC, PIN, CDM, PTR) are instantiated as NestJS
+ * singletons and auto-registered with the manager on module init.
  */
 @Module({
   controllers: [XfsController],
-  providers: [XfsManagerService, XfsGateway],
-  exports: [XfsManagerService],
+  providers: [
+    XfsManagerService,
+    XfsGateway,
+    IdcDeviceService,
+    PinDeviceService,
+    CdmDeviceService,
+    PtrDeviceService,
+  ],
+  exports: [
+    XfsManagerService,
+    IdcDeviceService,
+    PinDeviceService,
+    CdmDeviceService,
+    PtrDeviceService,
+  ],
 })
-export class XfsModule {}
+export class XfsModule implements OnModuleInit {
+  constructor(
+    private readonly manager: XfsManagerService,
+    private readonly idc: IdcDeviceService,
+    private readonly pin: PinDeviceService,
+    private readonly cdm: CdmDeviceService,
+    private readonly ptr: PtrDeviceService,
+  ) {}
+
+  onModuleInit(): void {
+    this.manager.registerService(this.idc);
+    this.manager.registerService(this.pin);
+    this.manager.registerService(this.cdm);
+    this.manager.registerService(this.ptr);
+  }
+}
