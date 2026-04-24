@@ -1,0 +1,158 @@
+// ============================================================================
+// ATM XFS Simulator — Prisma Schema
+// PostgreSQL. All monetary amounts are BigInt (IDR has no minor units but can
+// exceed 32-bit range). All timestamps are UTC.
+// ============================================================================
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "darwin-arm64", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// Account & card
+// ----------------------------------------------------------------------------
+
+model Account {
+  id             String   @id @default(cuid())
+  accountNumber  String   @unique
+  holderName     String
+  balance        BigInt
+  currency       String   @default("IDR")
+  dailyLimit     BigInt   @default(10000000)
+  dailyWithdrawn BigInt   @default(0)
+  status         String   @default("ACTIVE") // ACTIVE, BLOCKED, CLOSED
+  cards          VirtualCard[]
+  transactions   Transaction[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([accountNumber])
+  @@index([status])
+}
+
+model VirtualCard {
+  pan            String   @id
+  cardholderName String
+  expiryDate     String   // YYMM
+  pin            String   // simulator-only; stored as salted SHA-256 via @atm/shared hashPin()
+  track1         String
+  track2         String
+  issuer         String   @default("ZEGEN")
+  status         String   @default("ACTIVE") // ACTIVE, BLOCKED, EXPIRED, RETAINED
+  failedPinCount Int      @default(0)
+  accountId      String
+  account        Account  @relation(fields: [accountId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status])
+  @@index([accountId])
+}
+
+// ----------------------------------------------------------------------------
+// Transactions
+// ----------------------------------------------------------------------------
+
+model Transaction {
+  id           String   @id @default(cuid())
+  sessionId    String
+  pan          String
+  accountId    String
+  account      Account  @relation(fields: [accountId], references: [id])
+  txnType      String   // WITHDRAWAL, BALANCE, TRANSFER, DEPOSIT
+  amount       BigInt
+  currency     String   @default("IDR")
+  status       String   // PENDING, COMPLETED, FAILED, REVERSED
+  stanNo       String?
+  authCode     String?
+  responseCode String?
+  errorReason  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([pan])
+  @@index([sessionId])
+  @@index([createdAt])
+  @@index([status])
+  // Hot path for the daily-withdrawal-limit check in Phase 3.
+  @@index([accountId, status, createdAt])
+}
+
+// ----------------------------------------------------------------------------
+// XFS command + event logs
+// ----------------------------------------------------------------------------
+
+model XfsCommandLog {
+  id           String   @id @default(cuid())
+  sessionId    String?
+  hService     String
+  serviceClass String
+  commandCode  String
+  requestId    String
+  payload      Json
+  response     Json?
+  result       Int?
+  errorDetail  String?
+  durationMs   Int?
+  createdAt    DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([commandCode])
+  @@index([createdAt])
+}
+
+model XfsEventLog {
+  id           String   @id @default(cuid())
+  sessionId    String?
+  hService     String
+  serviceClass String
+  eventCode    String
+  eventClass   String
+  payload      Json
+  createdAt    DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([eventCode])
+  @@index([createdAt])
+}
+
+// ----------------------------------------------------------------------------
+// CDM cassette state (persisted snapshot; runtime truth lives in the service)
+// ----------------------------------------------------------------------------
+
+model CashUnit {
+  id           String   @id @default(cuid())
+  unitId       String   @unique
+  denomination Int
+  currency     String   @default("IDR")
+  status       String   @default("OK")
+  count        Int
+  initialCount Int
+  maximum      Int
+  minimum      Int
+  rejectCount  Int      @default(0)
+  updatedAt    DateTime @updatedAt
+}
+
+// ----------------------------------------------------------------------------
+// ATM session history (for replay)
+// ----------------------------------------------------------------------------
+
+model AtmSession {
+  id         String   @id
+  state      String
+  pan        String?
+  accountId  String?
+  startedAt  DateTime @default(now())
+  endedAt    DateTime?
+  endReason  String?  // COMPLETED, CANCELLED, TIMEOUT, ERROR
+
+  @@index([pan])
+  @@index([startedAt])
+}
