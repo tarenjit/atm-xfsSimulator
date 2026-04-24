@@ -9,6 +9,9 @@ import { XfsModule } from './xfs/xfs.module';
 import { HostModule } from './host/host.module';
 import { AtmModule } from './atm/atm.module';
 import { SessionsModule } from './sessions/sessions.module';
+import { CardsModule } from './cards/cards.module';
+import { CassettesModule } from './cassettes/cassettes.module';
+import { LogsModule } from './logs/logs.module';
 
 @Module({
   imports: [
@@ -26,6 +29,9 @@ import { SessionsModule } from './sessions/sessions.module';
     HostModule,
     AtmModule,
     SessionsModule,
+    CardsModule,
+    CassettesModule,
+    LogsModule,
   ],
 })
 export class AppModule {}
