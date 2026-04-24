@@ -6,6 +6,9 @@ import { buildPinoOptions } from './config/logger.config';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
 import { XfsModule } from './xfs/xfs.module';
+import { HostModule } from './host/host.module';
+import { AtmModule } from './atm/atm.module';
+import { SessionsModule } from './sessions/sessions.module';
 
 @Module({
   imports: [
@@ -20,6 +23,9 @@ import { XfsModule } from './xfs/xfs.module';
     PrismaModule,
     HealthModule,
     XfsModule,
+    HostModule,
+    AtmModule,
+    SessionsModule,
   ],
 })
 export class AppModule {}
