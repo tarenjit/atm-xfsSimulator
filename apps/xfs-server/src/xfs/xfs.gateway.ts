@@ -101,4 +101,13 @@ export class XfsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   broadcastThemeChanged(event: unknown) {
     this.server.emit('atm.themeChanged', event);
   }
+
+  /**
+   * Replay user actions over WS so the MacroStudio record banner can
+   * show a live step counter without polling.
+   */
+  @OnEvent('atm.userAction')
+  broadcastUserAction(event: unknown) {
+    this.server.emit('atm.userAction', event);
+  }
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { io, Socket } from 'socket.io-client';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 
@@ -42,9 +43,14 @@ interface MacroRunFrame {
 }
 
 /**
- * Macro Test Studio panel — the flagship Update_features.md §4 feature.
- * MVP: list / preview / run. Full editor with drag-reorder, recording,
- * and folder tree arrives in Phase 8b.2.
+ * Macro Test Studio panel — Update_features.md §4 + §9 (recording).
+ *
+ * Features:
+ *   - List, preview, and run saved macros with per-step pass/fail.
+ *   - Create a new (blank) macro inline.
+ *   - Record: capture live user actions + significant XFS events into
+ *     MacroStep[] and persist on stop. A banner shows the live step
+ *     count while recording so the operator can tell it's working.
  */
 export function MacroStudio() {
   const [macros, setMacros] = useState<Macro[]>([]);
@@ -53,22 +59,58 @@ export function MacroStudio() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const selected = macros.find((m) => m.id === selectedId);
+  // Recording state
+  const [recordingMacroId, setRecordingMacroId] = useState<string | null>(null);
+  const [recordingStepCount, setRecordingStepCount] = useState(0);
+  const [creating, setCreating] = useState(false);
 
-  const load = async () => {
+  const selected = macros.find((m) => m.id === selectedId);
+  const isRecording = recordingMacroId !== null;
+  const isRecordingThis = selected && recordingMacroId === selected.id;
+
+  const load = async (preserveSelection = true) => {
     try {
       const r = await api<{ macros: Macro[] }>('/macros');
       setMacros(r.macros);
-      if (!selectedId && r.macros.length > 0) setSelectedId(r.macros[0].id);
+      if (!preserveSelection || !selectedId) {
+        if (r.macros.length > 0) setSelectedId(r.macros[0].id);
+      }
     } catch (e) {
       setError(String(e));
     }
   };
 
   useEffect(() => {
-    void load();
+    void load(false);
+    // Poll recorder status on mount in case a prior session left it on.
+    (async () => {
+      try {
+        const s = await api<{ recording: boolean; macroId?: string; stepCount?: number }>(
+          '/macros/recorder/status',
+        );
+        if (s.recording && s.macroId) {
+          setRecordingMacroId(s.macroId);
+          setRecordingStepCount(s.stepCount ?? 0);
+        }
+      } catch {
+        /* backend not up yet */
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Live step counter while recording: subscribe to atm.userAction over WS.
+  useEffect(() => {
+    if (!recordingMacroId) return;
+    const url = process.env.NEXT_PUBLIC_WS_URL ?? 'http://localhost:3001';
+    const socket: Socket = io(`${url}/xfs`, { transports: ['websocket', 'polling'] });
+    socket.on('atm.userAction', () => {
+      setRecordingStepCount((n) => n + 1);
+    });
+    return () => {
+      socket.close();
+    };
+  }, [recordingMacroId]);
 
   const runMacro = async (id: string) => {
     setRunning(true);
@@ -87,40 +129,124 @@ export function MacroStudio() {
     }
   };
 
+  const startRecording = async (id: string) => {
+    setError(null);
+    try {
+      await api(`/macros/${id}/record/start`, { method: 'POST' });
+      setRecordingMacroId(id);
+      setRecordingStepCount(0);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!recordingMacroId) return;
+    const id = recordingMacroId;
+    setError(null);
+    try {
+      await api(`/macros/${id}/record/stop`, { method: 'POST' });
+      setRecordingMacroId(null);
+      setRecordingStepCount(0);
+      await load(true);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const createMacro = async () => {
+    const name = window.prompt('New macro name?', 'Untitled macro');
+    if (!name) return;
+    setCreating(true);
+    try {
+      const r = await api<{ macro: Macro }>('/macros', {
+        method: 'POST',
+        body: JSON.stringify({ name, folder: 'Recorded' }),
+      });
+      await load(false);
+      setSelectedId(r.macro.id);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold uppercase tracking-widest chrome-dim">
           Macro Test Studio
         </h2>
-        <div className="text-xs chrome-muted">
-          {macros.length} saved{selected && ` · viewing ${selected.name}`}
+        <div className="text-xs chrome-muted flex items-center gap-3">
+          <span>
+            {macros.length} saved{selected && ` · viewing ${selected.name}`}
+          </span>
+          <button
+            onClick={createMacro}
+            disabled={creating || isRecording}
+            className="px-2 py-1 rounded bg-zegen-accent/20 border border-zegen-accent/50 text-zegen-accent text-[10px] uppercase tracking-widest hover:bg-zegen-accent/30 disabled:opacity-40"
+          >
+            + New
+          </button>
         </div>
       </div>
+
+      {/* Live recording banner */}
+      {isRecording && (
+        <div className="rounded-lg border-2 border-red-500 bg-red-500/10 p-3 flex items-center gap-3">
+          <span className="relative flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75" />
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+          </span>
+          <div className="flex-1 text-xs">
+            <div className="text-red-300 font-semibold">
+              Recording into{' '}
+              {macros.find((m) => m.id === recordingMacroId)?.name ?? recordingMacroId}
+            </div>
+            <div className="chrome-muted font-mono">
+              {recordingStepCount} user action{recordingStepCount === 1 ? '' : 's'} captured · drive
+              the ATM at <code>/atm</code> to record steps
+            </div>
+          </div>
+          <button
+            onClick={stopRecording}
+            className="px-3 py-1.5 rounded bg-red-600 text-white text-xs font-medium hover:bg-red-500"
+          >
+            ■ Stop
+          </button>
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-[300px_1fr] gap-4">
         {/* Macro list */}
         <div className="chrome-surface border rounded-lg p-2 max-h-96 overflow-y-auto">
-          {macros.map((m) => (
-            <button
-              key={m.id}
-              onClick={() => setSelectedId(m.id)}
-              className={cn(
-                'w-full text-left p-2 rounded text-xs transition-colors',
-                selectedId === m.id
-                  ? 'bg-zegen-accent/20 border border-zegen-accent/50'
-                  : 'hover:bg-white/5 border border-transparent',
-              )}
-            >
-              <div className="font-medium chrome-text">{m.name}</div>
-              <div className="chrome-dim font-mono text-[10px]">
-                {m.folder ?? 'unfiled'} · {m.steps?.length ?? 0} steps
-              </div>
-            </button>
-          ))}
-          {macros.length === 0 && (
-            <div className="p-3 text-xs chrome-dim">no macros yet</div>
-          )}
+          {macros.map((m) => {
+            const isBeingRecorded = recordingMacroId === m.id;
+            return (
+              <button
+                key={m.id}
+                onClick={() => setSelectedId(m.id)}
+                className={cn(
+                  'w-full text-left p-2 rounded text-xs transition-colors',
+                  selectedId === m.id
+                    ? 'bg-zegen-accent/20 border border-zegen-accent/50'
+                    : 'hover:bg-white/5 border border-transparent',
+                )}
+              >
+                <div className="font-medium chrome-text flex items-center gap-2">
+                  {isBeingRecorded && (
+                    <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                  )}
+                  <span>{m.name}</span>
+                </div>
+                <div className="chrome-dim font-mono text-[10px]">
+                  {m.folder ?? 'unfiled'} · {m.steps?.length ?? 0} steps
+                </div>
+              </button>
+            );
+          })}
+          {macros.length === 0 && <div className="p-3 text-xs chrome-dim">no macros yet</div>}
         </div>
 
         {/* Steps + run */}
@@ -135,20 +261,43 @@ export function MacroStudio() {
                       <div className="text-xs chrome-muted mt-0.5">{selected.description}</div>
                     )}
                   </div>
-                  <button
-                    onClick={() => runMacro(selected.id)}
-                    disabled={running}
-                    className="px-4 py-2 rounded bg-green-600 text-white font-medium text-sm hover:bg-green-500 disabled:opacity-40 flex items-center gap-2"
-                  >
-                    {running ? (
-                      <>
-                        <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Running
-                      </>
+                  <div className="flex items-center gap-2">
+                    {isRecordingThis ? (
+                      <button
+                        onClick={stopRecording}
+                        className="px-4 py-2 rounded bg-red-600 text-white font-medium text-sm hover:bg-red-500 flex items-center gap-2"
+                      >
+                        ■ Stop recording
+                      </button>
                     ) : (
-                      <>▶ Play</>
+                      <button
+                        onClick={() => startRecording(selected.id)}
+                        disabled={isRecording || running}
+                        title={
+                          isRecording
+                            ? 'another recording is in progress'
+                            : 'record user actions on /atm into this macro'
+                        }
+                        className="px-3 py-2 rounded border-2 border-red-500 text-red-400 font-medium text-sm hover:bg-red-500/10 disabled:opacity-40 flex items-center gap-2"
+                      >
+                        ● Record
+                      </button>
                     )}
-                  </button>
+                    <button
+                      onClick={() => runMacro(selected.id)}
+                      disabled={running || isRecording}
+                      className="px-4 py-2 rounded bg-green-600 text-white font-medium text-sm hover:bg-green-500 disabled:opacity-40 flex items-center gap-2"
+                    >
+                      {running ? (
+                        <>
+                          <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Running
+                        </>
+                      ) : (
+                        <>▶ Play</>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="border-t chrome-border pt-2 space-y-1">

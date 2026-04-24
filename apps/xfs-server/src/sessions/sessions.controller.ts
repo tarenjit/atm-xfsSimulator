@@ -1,9 +1,11 @@
 import { Body, Controller, Get, NotFoundException, Post } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { IsInt, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
 import { PinDeviceService } from '@atm/xfs-devices';
 import type { VirtualCard } from '@atm/xfs-devices';
 import { AtmAppService } from '../atm/atm-app.service';
 import { PrismaService } from '../prisma/prisma.service';
+import type { UserAction } from '../atm/user-action.types';
 
 class InsertCardDto {
   @IsString()
@@ -41,6 +43,7 @@ export class SessionsController {
     private readonly atm: AtmAppService,
     private readonly prisma: PrismaService,
     private readonly pin: PinDeviceService,
+    private readonly events: EventEmitter2,
   ) {}
 
   @Get('current')
@@ -72,6 +75,13 @@ export class SessionsController {
   @Post('press-key')
   pressKey(@Body() body: PressKeyDto) {
     this.pin.pressKey(body.key);
+    const action: UserAction = {
+      kind: 'KEY_PRESS',
+      key: body.key,
+      sessionId: this.atm.getSession()?.id,
+      timestamp: new Date().toISOString(),
+    };
+    this.events.emit('atm.userAction', action);
     return { ok: true };
   }
 

@@ -11,6 +11,7 @@ import {
 import { IsArray, IsOptional, IsString, Length } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
 import { MacroRunnerService } from './macro-runner.service';
+import { MacroRecorderService } from './macro-recorder.service';
 import type { MacroStep } from './macro.types';
 
 class CreateMacroDto {
@@ -68,6 +69,7 @@ export class MacrosController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly runner: MacroRunnerService,
+    private readonly recorder: MacroRecorderService,
   ) {}
 
   @Get()
@@ -76,6 +78,13 @@ export class MacrosController {
       orderBy: [{ folder: 'asc' }, { name: 'asc' }],
     });
     return { macros };
+  }
+
+  // Recorder status lives here (before :id) so it doesn't get routed as
+  // GET /macros/:id with id="record".
+  @Get('recorder/status')
+  recordStatus() {
+    return this.recorder.status();
   }
 
   @Get(':id')
@@ -140,5 +149,18 @@ export class MacrosController {
       take: 30,
     });
     return { runs };
+  }
+
+  @Post(':id/record/start')
+  async recordStart(@Param('id') id: string) {
+    const r = await this.recorder.startRecording(id);
+    return { recording: true, ...r };
+  }
+
+  @Post(':id/record/stop')
+  async recordStop(@Param('id') _id: string) {
+    const r = await this.recorder.stopRecording();
+    if (!r) return { recording: false };
+    return { recording: false, ...r };
   }
 }

@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { HostEmulatorService } from '../host/host-emulator.service';
 import { XfsManagerService } from '../xfs/xfs-manager.service';
 import { AtmSession, AtmState, AtmTxnType } from './atm-session.types';
+import { UserAction } from './user-action.types';
 
 const MAX_PIN_ATTEMPTS = 3;
 
@@ -100,6 +101,12 @@ export class AtmAppService implements OnModuleDestroy {
     this.session = session;
     await this.prisma.atmSession.create({
       data: { id: session.id, state: session.state, pan },
+    });
+    this.emitUserAction({
+      kind: 'CARD_INSERT',
+      pan,
+      sessionId: session.id,
+      timestamp: new Date().toISOString(),
     });
     this.notifyState('IDLE');
 
@@ -218,6 +225,12 @@ export class AtmAppService implements OnModuleDestroy {
     if (!this.session || this.session.state !== 'MAIN_MENU') {
       throw new Error(`cannot select transaction in state=${this.session?.state ?? 'none'}`);
     }
+    this.emitUserAction({
+      kind: 'SELECT_TRANSACTION',
+      txnType: txn,
+      sessionId: this.session.id,
+      timestamp: new Date().toISOString(),
+    });
     this.session.selectedTxn = txn;
     if (txn === 'BALANCE') {
       await this.processBalance();
@@ -235,6 +248,12 @@ export class AtmAppService implements OnModuleDestroy {
     if (!Number.isInteger(amount) || amount <= 0 || amount % 20_000 !== 0) {
       throw new Error('amount must be a positive multiple of 20000 IDR');
     }
+    this.emitUserAction({
+      kind: 'SUBMIT_AMOUNT',
+      amount,
+      sessionId: this.session.id,
+      timestamp: new Date().toISOString(),
+    });
     this.session.amount = amount;
     this.transitionTo('CONFIRM');
   }
@@ -243,6 +262,11 @@ export class AtmAppService implements OnModuleDestroy {
     if (!this.session || this.session.state !== 'CONFIRM') {
       throw new Error(`cannot confirm in state=${this.session?.state ?? 'none'}`);
     }
+    this.emitUserAction({
+      kind: 'CONFIRM',
+      sessionId: this.session.id,
+      timestamp: new Date().toISOString(),
+    });
     this.transitionTo('PROCESSING');
 
     if (this.session.selectedTxn === 'WITHDRAWAL') {
@@ -254,9 +278,20 @@ export class AtmAppService implements OnModuleDestroy {
 
   async cancelTransaction(reason = 'user cancelled'): Promise<void> {
     if (!this.session) return;
+    this.emitUserAction({
+      kind: 'CANCEL',
+      reason,
+      sessionId: this.session.id,
+      timestamp: new Date().toISOString(),
+    });
     this.logger.log(`cancel session ${this.session.id}: ${reason}`);
     await this.safeEject();
     await this.endSession('CANCELLED');
+  }
+
+  /** Central emit point for recorder subscribers. */
+  private emitUserAction(action: UserAction): void {
+    this.events.emit('atm.userAction', action);
   }
 
   private async processWithdrawal(): Promise<void> {
