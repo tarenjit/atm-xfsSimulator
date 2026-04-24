@@ -4,16 +4,7 @@ import { useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
-
-interface MacroStep {
-  id: string;
-  order: number;
-  kind: 'ACTION' | 'CHECKPOINT' | 'ASSERTION' | 'WAIT';
-  device: string;
-  operation: string;
-  parameters: Array<{ name: string; type: string; value: unknown; displayLabel?: string }>;
-  enabled: boolean;
-}
+import { MacroStepEditor, type MacroStep, type MacroStepResult } from './MacroStepEditor';
 
 interface Macro {
   id: string;
@@ -23,15 +14,6 @@ interface Macro {
   tags: string[];
   steps: MacroStep[];
   updatedAt: string;
-}
-
-interface MacroStepResult {
-  id: string;
-  order: number;
-  status: 'PASSED' | 'FAILED' | 'SKIPPED';
-  durationMs: number;
-  message?: string;
-  error?: string;
 }
 
 interface MacroRunFrame {
@@ -172,6 +154,33 @@ export function MacroStudio() {
     }
   };
 
+  /** Persist a new step list for the given macro and update local state. */
+  const saveSteps = async (id: string, steps: MacroStep[]) => {
+    // Optimistic: update local list immediately for snappy UI, then fire
+    // the PATCH. Rollback on error.
+    setMacros((prev) => prev.map((m) => (m.id === id ? { ...m, steps } : m)));
+    try {
+      await api(`/macros/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ steps }),
+      });
+    } catch (e) {
+      setError(String(e));
+      await load(true);
+    }
+  };
+
+  const deleteMacro = async (id: string) => {
+    if (!window.confirm('Delete this macro? This cannot be undone.')) return;
+    try {
+      await api(`/macros/${id}`, { method: 'DELETE' });
+      setMacros((prev) => prev.filter((m) => m.id !== id));
+      if (selectedId === id) setSelectedId(null);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
@@ -262,6 +271,14 @@ export function MacroStudio() {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => deleteMacro(selected.id)}
+                      disabled={running || isRecording}
+                      title="Delete this macro"
+                      className="px-2 py-2 rounded border chrome-border chrome-muted hover:text-red-400 hover:border-red-400 disabled:opacity-40 text-xs"
+                    >
+                      🗑
+                    </button>
                     {isRecordingThis ? (
                       <button
                         onClick={stopRecording}
@@ -300,57 +317,13 @@ export function MacroStudio() {
                   </div>
                 </div>
 
-                <div className="border-t chrome-border pt-2 space-y-1">
-                  {selected.steps.map((s) => {
-                    const result = run?.stepResults.find((r) => r.id === s.id);
-                    return (
-                      <div
-                        key={s.id}
-                        className={cn(
-                          'p-2 rounded text-xs flex items-center gap-2 font-mono',
-                          result?.status === 'PASSED' && 'bg-green-500/10',
-                          result?.status === 'FAILED' && 'bg-red-500/10',
-                          !result && !s.enabled && 'opacity-40',
-                        )}
-                      >
-                        <span className="w-5 text-right chrome-dim">{s.order}</span>
-                        <span
-                          className={cn(
-                            'px-1.5 py-0.5 rounded text-[10px] uppercase',
-                            s.kind === 'ACTION'
-                              ? 'bg-cyan-500/20 text-cyan-300'
-                              : s.kind === 'CHECKPOINT'
-                                ? 'bg-amber-500/20 text-amber-300'
-                                : 'bg-slate-500/20 text-slate-300',
-                          )}
-                        >
-                          {s.kind}
-                        </span>
-                        <span className="chrome-muted shrink-0">{s.device}:</span>
-                        <span className="chrome-text">{s.operation}</span>
-                        {s.parameters.length > 0 && (
-                          <span className="chrome-dim">
-                            (
-                            {s.parameters
-                              .map((p) => p.displayLabel ?? `${p.name}=${String(p.value)}`)
-                              .join(', ')}
-                            )
-                          </span>
-                        )}
-                        {result && (
-                          <span
-                            className={cn(
-                              'ml-auto shrink-0 text-[10px]',
-                              result.status === 'PASSED' && 'text-green-400',
-                              result.status === 'FAILED' && 'text-red-400',
-                            )}
-                          >
-                            {result.status} · {result.durationMs}ms
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
+                <div className="border-t chrome-border pt-2">
+                  <MacroStepEditor
+                    steps={selected.steps}
+                    results={run?.stepResults}
+                    readOnly={running || isRecording}
+                    onChange={(next) => saveSteps(selected.id, next)}
+                  />
                 </div>
               </div>
 
