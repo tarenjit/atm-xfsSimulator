@@ -1,7 +1,20 @@
+import { createHash } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { IsoResponseCode } from '@atm/iso8583';
 import { formatStan } from '@atm/shared';
 import { PrismaService } from '../prisma/prisma.service';
+
+/**
+ * Produce a stable 63-bit signed integer key for pg_advisory_xact_lock(bigint).
+ * SHA-1 of the accountId, first 8 bytes as a big-endian int, masked to fit
+ * the signed bigint positive range.
+ */
+function accountLockKey(accountId: string): string {
+  const digest = createHash('sha1').update(accountId).digest();
+  // Take first 8 bytes as big-endian, mask top bit so it's a positive bigint.
+  const n = digest.readBigUInt64BE(0) & 0x7fffffffffffffffn;
+  return n.toString();
+}
 
 export interface AuthResult {
   success: boolean;
@@ -34,9 +47,12 @@ export interface BalanceResult {
  *   - check card status, expiry, daily limit, balance
  *   - return an ISO 8583 response code (Field 39)
  *
- * Concurrency: withdrawals run inside a Prisma $transaction so balance and
- * dailyWithdrawn updates are atomic per card/account. In Phase 6 we'll add
- * an advisory lock for extra safety under high concurrency.
+ * Concurrency: withdrawals run inside a Prisma $transaction that acquires
+ * a Postgres transaction-scoped advisory lock keyed by accountId before
+ * reading balance. This serialises concurrent authorizations on the same
+ * account so the read-then-decrement sequence cannot race. The daily-limit
+ * check uses an aggregate SUM over COMPLETED WITHDRAWAL transactions as the
+ * authoritative source — Account.dailyWithdrawn is only a UI hint.
  */
 @Injectable()
 export class HostEmulatorService {
@@ -52,7 +68,11 @@ export class HostEmulatorService {
     });
 
     if (!card) {
-      return { success: false, responseCode: IsoResponseCode.INVALID_CARD, reason: 'card not found' };
+      return {
+        success: false,
+        responseCode: IsoResponseCode.INVALID_CARD,
+        reason: 'card not found',
+      };
     }
 
     if (card.status === 'BLOCKED') {
@@ -108,7 +128,9 @@ export class HostEmulatorService {
         data: { failedPinCount: { increment: 1 } },
       });
       const reason =
-        updated.failedPinCount >= 3 ? 'pin tries exceeded — card will be retained' : 'incorrect pin';
+        updated.failedPinCount >= 3
+          ? 'pin tries exceeded — card will be retained'
+          : 'incorrect pin';
       const code =
         updated.failedPinCount >= 3
           ? IsoResponseCode.PIN_TRIES_EXCEEDED
@@ -144,7 +166,28 @@ export class HostEmulatorService {
           };
         }
 
-        const balance = Number(card.account.balance);
+        // Serialize concurrent authorizations against the same account via a
+        // Postgres transaction-scoped advisory lock. The lock is released when
+        // the surrounding $transaction commits or rolls back — no cleanup.
+        // Key: 32-bit hash of accountId fits into pg_advisory_xact_lock(bigint).
+        await tx.$executeRawUnsafe(
+          `SELECT pg_advisory_xact_lock($1::bigint)`,
+          accountLockKey(card.accountId),
+        );
+
+        // Re-read after acquiring the lock so balance reflects any sibling
+        // transaction that just committed.
+        const locked = await tx.account.findUnique({ where: { id: card.accountId } });
+        if (!locked) {
+          return {
+            approved: false,
+            responseCode: IsoResponseCode.NO_CARD_RECORD,
+            stanNo,
+            reason: 'account not found',
+          };
+        }
+
+        const balance = Number(locked.balance);
         if (balance < params.amount) {
           return {
             approved: false,
@@ -259,6 +302,12 @@ export class HostEmulatorService {
   }): Promise<void> {
     this.logger.warn(`reversing STAN=${params.stanNo} reason=${params.reason}`);
     await this.prisma.$transaction(async (tx) => {
+      // Same advisory lock as authorize — the reversal must not race against
+      // a concurrent authorization on the same account.
+      await tx.$executeRawUnsafe(
+        `SELECT pg_advisory_xact_lock($1::bigint)`,
+        accountLockKey(params.accountId),
+      );
       await tx.account.update({
         where: { id: params.accountId },
         data: {

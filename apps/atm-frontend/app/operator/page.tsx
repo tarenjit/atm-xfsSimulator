@@ -3,6 +3,7 @@ import { CassetteManager } from '@/components/operator/CassetteManager';
 import { CardManager } from '@/components/operator/CardManager';
 import { LogStream } from '@/components/operator/LogStream';
 import { TransactionList } from '@/components/operator/TransactionList';
+import { SessionHistory } from '@/components/operator/SessionHistory';
 
 export default function OperatorPage() {
   return (
@@ -16,7 +17,7 @@ export default function OperatorPage() {
             <h1 className="text-3xl font-semibold">Zegen ATM Simulator</h1>
           </div>
           <div className="text-xs text-slate-500">
-            Dashboard, devices, cassettes, cards, logs.
+            Dashboard, devices, cassettes, cards, logs, replay.
           </div>
         </header>
 
@@ -27,10 +28,12 @@ export default function OperatorPage() {
           <TransactionList />
         </div>
 
+        <SessionHistory />
+
         <CardManager />
 
         <footer className="text-xs text-slate-600 border-t border-slate-800 pt-4">
-          Phase 5 — operator console. Next: ISO 8583 encoder, session replay, OpenAPI.
+          Phase 7 — click any session to open the replay modal.
         </footer>
       </div>
     </main>

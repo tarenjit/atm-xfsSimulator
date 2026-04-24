@@ -1,13 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import {
-  CDM_CMD,
-  IDC_CMD,
-  PIN_CMD,
-  PTR_CMD,
-  XfsResult,
-  XfsServiceClass,
-} from '@atm/xfs-core';
+import { CDM_CMD, IDC_CMD, PIN_CMD, PTR_CMD, XfsResult, XfsServiceClass } from '@atm/xfs-core';
 import {
   CdmDeviceService,
   IdcDeviceService,
@@ -25,6 +18,32 @@ import { AtmSession, AtmState, AtmTxnType } from './atm-session.types';
 const MAX_PIN_ATTEMPTS = 3;
 
 /**
+ * States where the session is waiting on human input — idle timer applies
+ * only to these. Machine-driven states (PROCESSING, DISPENSING, PRINTING,
+ * EJECTING) have their own per-XFS-command timeouts and must not be
+ * interrupted by the idle watchdog.
+ */
+const IDLE_TIMEOUT_STATES = new Set<AtmState>([
+  'CARD_INSERTED',
+  'PIN_ENTRY',
+  'PIN_VERIFIED',
+  'MAIN_MENU',
+  'AMOUNT_ENTRY',
+  'CONFIRM',
+]);
+
+/**
+ * Auto-cancel session if no transition within this window (ms).
+ * Overridable via ATM_IDLE_TIMEOUT_MS env var — tests set a low value and
+ * the getter reads fresh on each arm so a late env change applies.
+ */
+function idleTimeoutMs(): number {
+  const raw = process.env.ATM_IDLE_TIMEOUT_MS;
+  const n = raw ? parseInt(raw, 10) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : 60_000;
+}
+
+/**
  * AtmAppService — the ATM's transaction brain.
  *
  * Holds the active session (single-user model, matches physical ATMs) and
@@ -35,9 +54,10 @@ const MAX_PIN_ATTEMPTS = 3;
  * AtmSession on start/end so Phase 6 replay has a source.
  */
 @Injectable()
-export class AtmAppService {
+export class AtmAppService implements OnModuleDestroy {
   private readonly logger = new Logger(AtmAppService.name);
   private session: AtmSession | null = null;
+  private idleTimer: NodeJS.Timeout | null = null;
   private readonly bankName = process.env.ATM_BANK_NAME ?? 'Bank Zegen';
   private readonly atmId = process.env.ATM_TERMINAL_ID ?? 'ZGN-001';
 
@@ -138,7 +158,21 @@ export class AtmAppService {
           minLen: 4,
           maxLen: 6,
           autoEnd: false,
-          activeKeys: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'ENTER', 'CANCEL', 'CLEAR'],
+          activeKeys: [
+            '0',
+            '1',
+            '2',
+            '3',
+            '4',
+            '5',
+            '6',
+            '7',
+            '8',
+            '9',
+            'ENTER',
+            'CANCEL',
+            'CLEAR',
+          ],
           activeFDKs: [],
           terminateKeys: ['ENTER'],
         },
@@ -397,6 +431,7 @@ export class AtmAppService {
     this.session.updatedAt = new Date();
     this.logger.log(`state: ${prev} → ${next}`);
     this.events.emit('atm.stateChanged', { session: { ...this.session }, previousState: prev });
+    this.armIdleTimer(next);
   }
 
   private notifyState(prev: AtmState): void {
@@ -405,10 +440,12 @@ export class AtmAppService {
       session: { ...this.session },
       previousState: prev,
     });
+    this.armIdleTimer(this.session.state);
   }
 
   private async endSession(reason: 'COMPLETED' | 'CANCELLED' | 'TIMEOUT' | 'ERROR'): Promise<void> {
     if (!this.session) return;
+    this.clearIdleTimer();
     const session = this.session;
     session.endedAt = new Date();
     session.endReason = reason;
@@ -424,5 +461,44 @@ export class AtmAppService {
     this.transitionTo('ENDED');
     this.session = null;
     this.events.emit('atm.sessionEnded', { session, reason });
+  }
+
+  /**
+   * Arm (or re-arm) the inactivity watchdog. Only runs while the session is
+   * in a state that awaits human input; machine-driven states clear the
+   * timer to avoid interrupting a running dispense/print cycle.
+   */
+  private armIdleTimer(state: AtmState): void {
+    this.clearIdleTimer();
+    if (!IDLE_TIMEOUT_STATES.has(state)) return;
+    const sessionId = this.session?.id;
+    const ms = idleTimeoutMs();
+    this.idleTimer = setTimeout(() => {
+      // Only fire if the captured sessionId is still the active one.
+      if (!this.session || this.session.id !== sessionId) return;
+      this.logger.warn(`session ${sessionId} idle for ${ms}ms — auto-cancelling`);
+      void this.handleIdleTimeout();
+    }, ms);
+    // unref so the timer never holds a shutting-down process open.
+    this.idleTimer.unref?.();
+  }
+
+  private clearIdleTimer(): void {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+  }
+
+  private async handleIdleTimeout(): Promise<void> {
+    if (!this.session) return;
+    this.session.errorMessage = 'session timed out';
+    this.transitionTo('ERROR');
+    await this.safeEject();
+    await this.endSession('TIMEOUT');
+  }
+
+  onModuleDestroy(): void {
+    this.clearIdleTimer();
   }
 }

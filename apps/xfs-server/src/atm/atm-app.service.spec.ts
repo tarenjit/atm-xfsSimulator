@@ -270,4 +270,55 @@ describe('AtmAppService', () => {
     await atm.onCardInserted(sampleCard.pan, sampleCard);
     expect(atm.getSession()).toBeNull();
   });
+
+  describe('idle timeout', () => {
+    const originalTimeout = process.env.ATM_IDLE_TIMEOUT_MS;
+
+    beforeEach(() => {
+      process.env.ATM_IDLE_TIMEOUT_MS = '50';
+    });
+    afterEach(() => {
+      if (originalTimeout === undefined) delete process.env.ATM_IDLE_TIMEOUT_MS;
+      else process.env.ATM_IDLE_TIMEOUT_MS = originalTimeout;
+    });
+
+    it('auto-cancels a session stuck in PIN_ENTRY', async () => {
+      const endedSpy = jest.fn();
+      const ev = moduleRef.get(EventEmitter2);
+      ev.on('atm.sessionEnded', endedSpy);
+
+      await atm.onCardInserted(sampleCard.pan, sampleCard);
+      expect(atm.getSession()?.state).toBe('PIN_ENTRY');
+
+      // Wait past the 50ms timeout.
+      await new Promise((r) => setTimeout(r, 150));
+
+      expect(atm.getSession()).toBeNull();
+      expect(endedSpy).toHaveBeenCalled();
+      const [frame] = endedSpy.mock.calls[0] as [{ reason: string }];
+      expect(frame.reason).toBe('TIMEOUT');
+    });
+
+    it('does not fire while a session is actively completing', async () => {
+      await atm.onCardInserted(sampleCard.pan, sampleCard);
+      const entry = atm.beginPinEntry();
+      await Promise.resolve();
+      for (const k of ['1', '2', '3', '4']) pin.pressKey(k);
+      pin.pressKey('ENTER');
+      await entry;
+
+      // selectTransaction → submitAmount → confirm all inside the 50ms budget
+      // would be flaky. Instead just confirm that after a completed session,
+      // no dangling timer fires and causes unhandled state changes.
+      await atm.selectTransaction('WITHDRAWAL');
+      await atm.submitAmount(200_000);
+      await atm.confirmTransaction();
+
+      // Session is null after completion.
+      expect(atm.getSession()).toBeNull();
+      // Give any lingering timer a chance to mis-fire.
+      await new Promise((r) => setTimeout(r, 100));
+      expect(atm.getSession()).toBeNull();
+    });
+  });
 });

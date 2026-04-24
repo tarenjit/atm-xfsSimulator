@@ -52,41 +52,53 @@ function buildPrismaMock(cards: Card[]) {
       findUnique: jest.fn(({ where }: { where: { pan: string } }) =>
         Promise.resolve(map.get(where.pan) ?? null),
       ),
-      update: jest.fn(({ where, data }: { where: { pan: string }; data: Record<string, unknown> }) => {
-        const existing = map.get(where.pan);
-        if (!existing) throw new Error('not found');
-        if ('failedPinCount' in data) {
-          const v = data.failedPinCount as { increment?: number } | number;
-          if (typeof v === 'object' && 'increment' in v) {
-            existing.failedPinCount += v.increment ?? 0;
-          } else if (typeof v === 'number') {
-            existing.failedPinCount = v;
+      update: jest.fn(
+        ({ where, data }: { where: { pan: string }; data: Record<string, unknown> }) => {
+          const existing = map.get(where.pan);
+          if (!existing) throw new Error('not found');
+          if ('failedPinCount' in data) {
+            const v = data.failedPinCount as { increment?: number } | number;
+            if (typeof v === 'object' && 'increment' in v) {
+              existing.failedPinCount += v.increment ?? 0;
+            } else if (typeof v === 'number') {
+              existing.failedPinCount = v;
+            }
           }
-        }
-        if ('status' in data) {
-          existing.status = data.status as string;
-        }
-        return Promise.resolve({ ...existing });
-      }),
+          if ('status' in data) {
+            existing.status = data.status as string;
+          }
+          return Promise.resolve({ ...existing });
+        },
+      ),
     },
     account: {
-      update: jest.fn(({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+      findUnique: jest.fn(({ where }: { where: { id: string } }) => {
         const existing = [...map.values()].find((c) => c.accountId === where.id)?.account;
-        if (!existing) throw new Error('not found');
-        const bal = data.balance as { decrement?: bigint; increment?: bigint } | undefined;
-        if (bal?.decrement) existing.balance -= bal.decrement;
-        if (bal?.increment) existing.balance += bal.increment;
-        const daily = data.dailyWithdrawn as { increment?: bigint; decrement?: bigint } | undefined;
-        if (daily?.increment) existing.dailyWithdrawn += daily.increment;
-        if (daily?.decrement) existing.dailyWithdrawn -= daily.decrement;
-        return Promise.resolve({ ...existing });
+        return Promise.resolve(existing ? { ...existing } : null);
       }),
+      update: jest.fn(
+        ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+          const existing = [...map.values()].find((c) => c.accountId === where.id)?.account;
+          if (!existing) throw new Error('not found');
+          const bal = data.balance as { decrement?: bigint; increment?: bigint } | undefined;
+          if (bal?.decrement) existing.balance -= bal.decrement;
+          if (bal?.increment) existing.balance += bal.increment;
+          const daily = data.dailyWithdrawn as
+            | { increment?: bigint; decrement?: bigint }
+            | undefined;
+          if (daily?.increment) existing.dailyWithdrawn += daily.increment;
+          if (daily?.decrement) existing.dailyWithdrawn -= daily.decrement;
+          return Promise.resolve({ ...existing });
+        },
+      ),
     },
     transaction: {
       aggregate: jest.fn(() => Promise.resolve({ _sum: { amount: 0n } })),
       create: jest.fn(() => Promise.resolve({})),
       updateMany: jest.fn(() => Promise.resolve({ count: 0 })),
     },
+    // Advisory-lock SELECT + any other raw queries issued inside the txn.
+    $executeRawUnsafe: jest.fn(() => Promise.resolve(1)),
     $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prismaMock)),
   };
 
@@ -99,9 +111,7 @@ describe('HostEmulatorService', () => {
   function create(cards: Card[] = [makeCard()]) {
     const prisma = buildPrismaMock(cards);
     // The service uses $transaction(fn) — rebind it so `fn(tx)` receives prisma itself.
-    prisma.$transaction = jest.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
-      fn(prisma),
-    );
+    prisma.$transaction = jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma));
     const svc = new HostEmulatorService(prisma as never);
     return { svc, prisma };
   }
@@ -209,6 +219,36 @@ describe('HostEmulatorService', () => {
       });
       expect(r.approved).toBe(false);
       expect(r.responseCode).toBe(IsoResponseCode.EXCEEDS_WITHDRAWAL_LIMIT);
+    });
+
+    it('acquires advisory lock before reading balance', async () => {
+      const { svc, prisma } = create();
+      await svc.authorizeWithdrawal({
+        pan: '4580000000000001',
+        amount: 500_000,
+        sessionId: 'sess_1',
+      });
+      // Lock SQL must be issued, with a bigint-ish numeric key (as a string
+      // since pg_advisory_xact_lock takes bigint).
+      const calls = (prisma.$executeRawUnsafe as jest.Mock).mock.calls;
+      expect(calls.length).toBeGreaterThanOrEqual(1);
+      const [sql, key] = calls[0] as [string, string];
+      expect(sql).toMatch(/pg_advisory_xact_lock/);
+      expect(typeof key).toBe('string');
+      expect(/^\d+$/.test(key)).toBe(true);
+    });
+
+    it('reverseTransaction also acquires advisory lock', async () => {
+      const { svc, prisma } = create();
+      await svc.reverseTransaction({
+        stanNo: '000001',
+        sessionId: 'sess_1',
+        pan: '4580000000000001',
+        accountId: 'acc_1',
+        amount: 100_000,
+        reason: 'dispense failed',
+      });
+      expect((prisma.$executeRawUnsafe as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(1);
     });
   });
 
