@@ -12,6 +12,7 @@ import { SessionsModule } from './sessions/sessions.module';
 import { CardsModule } from './cards/cards.module';
 import { CassettesModule } from './cassettes/cassettes.module';
 import { LogsModule } from './logs/logs.module';
+import { ThemesModule } from './themes/themes.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { LogsModule } from './logs/logs.module';
     CardsModule,
     CassettesModule,
     LogsModule,
+    ThemesModule,
   ],
 })
 export class AppModule {}

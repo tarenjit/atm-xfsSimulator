@@ -25,6 +25,7 @@ async function main() {
   await prisma.virtualCard.deleteMany();
   await prisma.account.deleteMany();
   await prisma.cashUnit.deleteMany();
+  await prisma.bankTheme.deleteMany();
 
   // --- Accounts ---
   const happyAccount = await prisma.account.create({
@@ -147,12 +148,80 @@ async function main() {
     ],
   });
 
+  // --- Bank themes (Update_features.md §8) ---
+  const receiptTpl = (bank: string) =>
+    `\n====================================\n    ${bank}\n====================================\n{{date}}\nATM:   {{atmId}}\nTrace: {{traceNo}}\n\nTransaction: {{txnType}}\nCard:        ****{{cardLast4}}\n\nAmount:      Rp {{amount}}\nTotal:       Rp {{total}}\nBalance:     Rp {{balance}}\n\nTerima kasih.\n====================================\n`.trim();
+
+  await prisma.bankTheme.createMany({
+    data: [
+      {
+        code: 'mandiri',
+        name: 'Bank Mandiri',
+        primaryColor: '#003D79',
+        secondaryColor: '#FFCC29',
+        accentColor: '#FFFFFF',
+        receiptTemplate: receiptTpl('BANK MANDIRI'),
+        isDefault: true,
+      },
+      {
+        code: 'bsi',
+        name: 'Bank Syariah Indonesia',
+        primaryColor: '#00754A',
+        secondaryColor: '#C9B47B',
+        accentColor: '#FFFFFF',
+        receiptTemplate: receiptTpl('BANK SYARIAH INDONESIA'),
+      },
+      {
+        code: 'btn',
+        name: 'Bank BTN',
+        primaryColor: '#F47920',
+        secondaryColor: '#002A6C',
+        accentColor: '#FFFFFF',
+        receiptTemplate: receiptTpl('BANK BTN'),
+      },
+      {
+        code: 'bni',
+        name: 'Bank BNI',
+        primaryColor: '#006B3F',
+        secondaryColor: '#F7941D',
+        accentColor: '#FFFFFF',
+        receiptTemplate: receiptTpl('BANK BNI'),
+      },
+      {
+        code: 'bri',
+        name: 'Bank BRI',
+        primaryColor: '#00529C',
+        secondaryColor: '#F7941D',
+        accentColor: '#FFFFFF',
+        receiptTemplate: receiptTpl('BANK BRI'),
+      },
+      {
+        code: 'bca',
+        name: 'Bank BCA',
+        primaryColor: '#0066CC',
+        secondaryColor: '#FFFFFF',
+        accentColor: '#F7941D',
+        receiptTemplate: receiptTpl('BANK BCA'),
+      },
+      {
+        code: 'zegen',
+        name: 'Bank Zegen',
+        primaryColor: '#0F172A',
+        secondaryColor: '#22D3EE',
+        accentColor: '#FFFFFF',
+        receiptTemplate: receiptTpl('BANK ZEGEN'),
+      },
+    ],
+  });
+
   // eslint-disable-next-line no-console
   console.log('[seed] Seed complete:');
   // eslint-disable-next-line no-console
   console.log(`  - 4 accounts, 4 virtual cards (HAPPY, LOW, BLOCKED, EXPIRED)`);
   // eslint-disable-next-line no-console
   console.log(`  - 4 cash units (CASS1=100k, CASS2=50k, CASS3=20k, REJECT)`);
+  // eslint-disable-next-line no-console
+  console.log(`  - 7 bank themes (mandiri default)`);
 }
 
 main()

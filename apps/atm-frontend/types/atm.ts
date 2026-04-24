@@ -38,3 +38,21 @@ export interface VirtualCardSummary {
   expiryDate: string;
   status: string;
 }
+
+export interface BankTheme {
+  id: string;
+  code: string;
+  name: string;
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  defaultLanguage: string;
+  logoUrl?: string | null;
+}
+
+export interface FdkOption {
+  slot: 'FDK_A' | 'FDK_B' | 'FDK_C' | 'FDK_D' | 'FDK_E' | 'FDK_F' | 'FDK_G' | 'FDK_H';
+  label: string;
+  value?: number | string; // e.g. amount 300000 or txnType 'BALANCE'
+  enabled: boolean;
+}

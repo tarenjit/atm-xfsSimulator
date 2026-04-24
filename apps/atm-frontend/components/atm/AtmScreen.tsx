@@ -1,35 +1,69 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { Button } from '@/components/ui/Button';
-import { CardPicker } from './CardPicker';
-import { PinPad } from './PinPad';
 import { useAtmSocket } from '@/hooks/useAtmSocket';
-import type { AtmSession, AtmTxnType } from '@/types/atm';
+import type { BankTheme, FdkOption, VirtualCardSummary } from '@/types/atm';
+import { HeaderBar } from './HeaderBar';
+import { BankScreen } from './BankScreen';
+import { KeypadPanel } from './KeypadPanel';
+import { FdkColumn } from './FdkColumn';
+import { CardSlot } from './CardSlot';
+import { CashTray } from './CashTray';
+import { ReceiptSlot } from './ReceiptSlot';
 
-const QUICK_AMOUNTS = [100_000, 200_000, 500_000, 1_000_000, 2_000_000];
+const WITHDRAW_FDKS: FdkOption[] = [
+  { slot: 'FDK_A', label: '300.000', value: 300_000, enabled: true },
+  { slot: 'FDK_B', label: '500.000', value: 500_000, enabled: true },
+  { slot: 'FDK_C', label: 'UANG ELEKTRONIK', enabled: false },
+  { slot: 'FDK_D', label: '', enabled: false },
+  { slot: 'FDK_E', label: '1.000.000', value: 1_000_000, enabled: true },
+  { slot: 'FDK_F', label: '2.000.000', value: 2_000_000, enabled: true },
+  { slot: 'FDK_G', label: 'PENARIKAN\nJUMLAH LAIN', enabled: true },
+  { slot: 'FDK_H', label: 'MENU LAINNYA', enabled: false },
+];
 
 export function AtmScreen() {
   const { connected, session, events } = useAtmSocket();
+  const [theme, setTheme] = useState<BankTheme | null>(null);
+  const [cards, setCards] = useState<VirtualCardSummary[]>([]);
+  const [selectedPan, setSelectedPan] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [amount, setAmount] = useState<string>('');
+  const [customAmount, setCustomAmount] = useState('');
   const [pinDigits, setPinDigits] = useState(0);
   const [pinBusy, setPinBusy] = useState(false);
 
-  // Hydrate initial session on mount
+  // Load active theme and card list at mount.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const data = await api<{ session: AtmSession | null }>('/sessions/current');
-        if (!cancelled && data.session) {
-          // the socket will also push, but this shortens the gap.
-        }
+        const t = await api<{ theme: BankTheme }>('/themes/active');
+        if (!cancelled) setTheme(t.theme);
       } catch {
-        /* backend not up yet */
+        /* backend not ready; rendered with fallback */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await api<{ cards: VirtualCardSummary[] }>('/cards');
+        if (!cancelled) {
+          setCards(r.cards);
+          // Pre-select the first ACTIVE card for fast demo insertion.
+          const active = r.cards.find((c) => c.status === 'ACTIVE');
+          if (active) setSelectedPan(active.pan);
+        }
+      } catch (e) {
+        if (!cancelled) setError(String(e));
       }
     })();
     return () => {
@@ -49,22 +83,28 @@ export function AtmScreen() {
     }
   }, []);
 
-  const pressKey = async (key: string) => {
-    try {
-      await api('/sessions/press-key', { method: 'POST', body: JSON.stringify({ key }) });
-      if (key === 'CLEAR') setPinDigits(0);
-      else if (key === 'CANCEL') setPinDigits(0);
-      else if (key === 'ENTER') setPinDigits(0);
-      else if (/^[0-9]$/.test(key)) setPinDigits((n) => Math.min(n + 1, 12));
-    } catch (e) {
-      setError(String(e));
+  const state = session?.state ?? 'IDLE';
+  const cardInserted = state !== 'IDLE' && state !== 'ENDED';
+
+  // --- Actions ---
+  const insertCard = async () => {
+    if (!selectedPan) {
+      setError('select a card first');
+      return;
     }
+    await wrap(() =>
+      api('/sessions/insert-card', {
+        method: 'POST',
+        body: JSON.stringify({ pan: selectedPan }),
+      }),
+    );
   };
 
-  const startPin = async () => {
+  const startPinEntry = async () => {
     setPinBusy(true);
     setPinDigits(0);
     try {
+      // Long timeout because this resolves only after ENTER is pressed.
       const r = await api<{ verified: boolean; reason?: string }>('/sessions/begin-pin', {
         method: 'POST',
         timeoutMs: 75_000,
@@ -77,268 +117,313 @@ export function AtmScreen() {
     }
   };
 
-  const state = session?.state ?? 'IDLE';
+  const pressKey = async (key: string) => {
+    // Only hit the PIN pad endpoint when we're buffering PIN or amount.
+    if (!pinBusy && !['CANCEL'].includes(key)) {
+      // Outside PIN entry, CANCEL still maps to session cancel.
+      if (key === 'CANCEL') {
+        await wrap(() => api('/sessions/cancel', { method: 'POST', body: JSON.stringify({}) }));
+      }
+      return;
+    }
+    try {
+      await api('/sessions/press-key', { method: 'POST', body: JSON.stringify({ key }) });
+      if (key === 'CLEAR') setPinDigits(0);
+      else if (key === 'CANCEL') {
+        setPinDigits(0);
+        setPinBusy(false);
+      } else if (key === 'ENTER') setPinDigits(0);
+      else if (/^[0-9]$/.test(key)) setPinDigits((n) => Math.min(n + 1, 12));
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const selectFdk = async (fdk: FdkOption) => {
+    if (!fdk.enabled) return;
+    if (state === 'MAIN_MENU') {
+      if (typeof fdk.value === 'number') {
+        // quick-amount withdrawal
+        await wrap(async () => {
+          await api('/sessions/select-transaction', {
+            method: 'POST',
+            body: JSON.stringify({ txnType: 'WITHDRAWAL' }),
+          });
+          await api('/sessions/submit-amount', {
+            method: 'POST',
+            body: JSON.stringify({ amount: fdk.value }),
+          });
+        });
+      } else if (fdk.label.includes('JUMLAH LAIN')) {
+        await wrap(() =>
+          api('/sessions/select-transaction', {
+            method: 'POST',
+            body: JSON.stringify({ txnType: 'WITHDRAWAL' }),
+          }),
+        );
+      }
+    }
+  };
+
+  const submitCustomAmount = async () => {
+    const v = parseInt(customAmount, 10);
+    if (!Number.isFinite(v)) return;
+    await wrap(() =>
+      api('/sessions/submit-amount', {
+        method: 'POST',
+        body: JSON.stringify({ amount: v }),
+      }),
+    );
+    setCustomAmount('');
+  };
+
+  const cancelSession = () =>
+    wrap(() => api('/sessions/cancel', { method: 'POST', body: JSON.stringify({}) }));
+
+  const confirmSession = () =>
+    wrap(() => api('/sessions/confirm', { method: 'POST', body: JSON.stringify({}) }));
+
+  const balanceInquiry = () =>
+    wrap(() =>
+      api('/sessions/select-transaction', {
+        method: 'POST',
+        body: JSON.stringify({ txnType: 'BALANCE' }),
+      }),
+    );
+
+  // Compute the FDK layout per current state.
+  const fdks: FdkOption[] = useMemo(() => {
+    if (state === 'MAIN_MENU') return WITHDRAW_FDKS;
+    return [
+      { slot: 'FDK_A', label: '', enabled: false },
+      { slot: 'FDK_B', label: '', enabled: false },
+      { slot: 'FDK_C', label: '', enabled: false },
+      { slot: 'FDK_D', label: '', enabled: false },
+      { slot: 'FDK_E', label: '', enabled: false },
+      { slot: 'FDK_F', label: '', enabled: false },
+      { slot: 'FDK_G', label: '', enabled: false },
+      { slot: 'FDK_H', label: '', enabled: false },
+    ];
+  }, [state]);
+
+  const primary = theme?.primaryColor ?? '#0F172A';
+  const accent = theme?.accentColor ?? '#FFFFFF';
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header connected={connected} state={state} />
+    <div className="min-h-screen flex flex-col bg-slate-950">
+      <HeaderBar
+        deploymentName={theme?.name ?? 'Zegen'}
+        atmName="Zegen Virtual ATM"
+        atmIp="127.0.0.1"
+        vendor="Hyosung"
+        model="ATM"
+        connected={connected}
+        state={state}
+      />
 
-      <main className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-xl bg-slate-900/70 border border-slate-800 rounded-2xl p-8 shadow-2xl">
-          {state === 'IDLE' && <IdlePanel />}
-          {state === 'IDLE' && !session && <CardPicker onInserted={() => { /* socket will update */ }} />}
-
-          {state === 'CARD_INSERTED' && (
-            <Message heading="Reading card…" sub="Please wait." />
-          )}
-
-          {state === 'PIN_ENTRY' && (
-            <div className="space-y-6">
-              <Message heading="Enter your PIN" sub="Use the keypad or your keyboard." />
-              <div className="flex justify-center gap-2">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <span
-                    key={i}
-                    className={cn(
-                      'w-6 h-6 rounded-full border',
-                      i < pinDigits ? 'bg-zegen-accent border-zegen-accent' : 'border-slate-600',
-                    )}
-                  />
-                ))}
-              </div>
-              {!pinBusy && (
-                <div className="flex justify-center">
-                  <Button onClick={() => wrap(startPin)}>Start PIN entry</Button>
-                </div>
-              )}
-              {pinBusy && (
-                <div className="flex justify-center">
-                  <PinPad onKey={pressKey} />
-                </div>
-              )}
+      <main className="flex-1 flex flex-col xl:flex-row gap-6 p-6 max-w-7xl w-full mx-auto">
+        {/* Left column: virtual ATM panel */}
+        <section className="flex-1 space-y-6">
+          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4">
+            {/* Blue screen + FDK columns */}
+            <div className="flex items-stretch gap-2">
+              <FdkColumn side="left" fdks={fdks.slice(0, 4)} onPress={selectFdk} />
+              <BankScreen
+                primaryColor={primary}
+                accentColor={accent}
+                theme={theme}
+                session={session}
+                cards={cards}
+                selectedPan={selectedPan}
+                onPickCard={setSelectedPan}
+                pinDigits={pinDigits}
+                customAmount={customAmount}
+                onCustomAmountChange={setCustomAmount}
+              />
+              <FdkColumn side="right" fdks={fdks.slice(4, 8)} onPress={selectFdk} />
             </div>
-          )}
 
-          {state === 'PIN_VERIFIED' && <Message heading="PIN verified" sub="Opening menu…" />}
+            {/* Card slot */}
+            <div className="mt-6 grid grid-cols-3 gap-4">
+              <CardSlot cardInserted={cardInserted} />
+              <div />
+              <ReceiptSlot />
+            </div>
 
-          {state === 'MAIN_MENU' && (
-            <div className="space-y-4">
-              <Message heading="What would you like to do?" />
-              <div className="grid grid-cols-2 gap-3">
-                {(['WITHDRAWAL', 'BALANCE'] as AtmTxnType[]).map((txn) => (
-                  <Button
-                    key={txn}
-                    size="lg"
-                    onClick={() =>
-                      wrap(() =>
-                        api('/sessions/select-transaction', {
-                          method: 'POST',
-                          body: JSON.stringify({ txnType: txn }),
-                        }),
-                      )
-                    }
-                  >
-                    {txn === 'WITHDRAWAL' ? 'Cash Withdrawal' : 'Balance Inquiry'}
-                  </Button>
-                ))}
+            {/* Keypad + cash tray */}
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-2 flex justify-center">
+                <KeypadPanel onKey={pressKey} />
               </div>
-              <div className="flex justify-center pt-2">
-                <Button
-                  variant="ghost"
-                  onClick={() =>
-                    wrap(() => api('/sessions/cancel', { method: 'POST', body: JSON.stringify({}) }))
-                  }
+              <CashTray active={state === 'DISPENSING' || state === 'EJECTING'} />
+            </div>
+          </div>
+        </section>
+
+        {/* Right column: context panel (action controls for current state) */}
+        <aside className="w-full xl:w-80 space-y-4">
+          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-3">
+            <h2 className="text-xs uppercase tracking-widest text-slate-500">Session</h2>
+            <dl className="text-xs space-y-1 font-mono">
+              <div className="flex justify-between">
+                <dt className="text-slate-500">state</dt>
+                <dd className="text-zegen-accent">{state}</dd>
+              </div>
+              {session?.id && (
+                <div className="flex justify-between">
+                  <dt className="text-slate-500">id</dt>
+                  <dd className="text-slate-300 truncate ml-4">{session.id}</dd>
+                </div>
+              )}
+              {session?.amount && (
+                <div className="flex justify-between">
+                  <dt className="text-slate-500">amount</dt>
+                  <dd className="text-slate-200">Rp {session.amount.toLocaleString('id-ID')}</dd>
+                </div>
+              )}
+              {session?.errorMessage && (
+                <div className="text-red-400 mt-2 whitespace-pre-wrap">{session.errorMessage}</div>
+              )}
+            </dl>
+          </div>
+
+          {/* State-sensitive action buttons */}
+          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-3">
+            <h2 className="text-xs uppercase tracking-widest text-slate-500">Actions</h2>
+
+            {state === 'IDLE' && (
+              <>
+                <div className="text-xs text-slate-400">
+                  Pick a virtual card, then press <span className="text-zegen-accent">Insert</span>.
+                </div>
+                <select
+                  value={selectedPan ?? ''}
+                  onChange={(e) => setSelectedPan(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs"
                 >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )}
+                  {cards.length === 0 && <option value="">loading…</option>}
+                  {cards.map((c) => (
+                    <option key={c.pan} value={c.pan}>
+                      {c.pan} — {c.cardholderName} ({c.status})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  disabled={!selectedPan || busy}
+                  onClick={insertCard}
+                  className="w-full py-2 rounded bg-zegen-accent text-slate-900 font-medium text-sm disabled:opacity-40"
+                >
+                  {busy ? 'Inserting…' : 'Insert card'}
+                </button>
+              </>
+            )}
 
-          {state === 'AMOUNT_ENTRY' && (
-            <div className="space-y-4">
-              <Message heading="How much cash?" sub="Amount must be a multiple of Rp 20,000." />
-              <div className="grid grid-cols-3 gap-2">
-                {QUICK_AMOUNTS.map((a) => (
-                  <Button
-                    key={a}
-                    variant="secondary"
-                    onClick={() =>
-                      wrap(() =>
-                        api('/sessions/submit-amount', {
-                          method: 'POST',
-                          body: JSON.stringify({ amount: a }),
-                        }),
-                      )
-                    }
-                  >
-                    {a.toLocaleString('id-ID')}
-                  </Button>
-                ))}
+            {state === 'PIN_ENTRY' && !pinBusy && (
+              <button
+                onClick={startPinEntry}
+                className="w-full py-2 rounded bg-zegen-accent text-slate-900 font-medium text-sm"
+              >
+                Start PIN entry
+              </button>
+            )}
+
+            {state === 'PIN_ENTRY' && pinBusy && (
+              <div className="text-xs text-slate-400">
+                Enter PIN on the keypad. Press <span className="text-zegen-accent">ENTER</span> to
+                submit, <span className="text-red-400">CANCEL</span> to abort.
               </div>
-              <div className="flex gap-2">
+            )}
+
+            {state === 'MAIN_MENU' && (
+              <button
+                onClick={balanceInquiry}
+                className="w-full py-2 rounded bg-slate-700 text-slate-100 text-sm"
+              >
+                Balance inquiry
+              </button>
+            )}
+
+            {state === 'AMOUNT_ENTRY' && (
+              <div className="space-y-2">
                 <input
                   type="number"
                   step={20_000}
                   min={20_000}
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-2"
-                  placeholder="Custom amount"
+                  value={customAmount}
+                  onChange={(e) => setCustomAmount(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
+                  placeholder="Amount (×20,000)"
                 />
-                <Button
-                  onClick={() => {
-                    const v = parseInt(amount, 10);
-                    if (Number.isFinite(v))
-                      wrap(() =>
-                        api('/sessions/submit-amount', {
-                          method: 'POST',
-                          body: JSON.stringify({ amount: v }),
-                        }),
-                      );
-                  }}
+                <button
+                  onClick={submitCustomAmount}
+                  disabled={!customAmount}
+                  className="w-full py-2 rounded bg-zegen-accent text-slate-900 font-medium text-sm disabled:opacity-40"
                 >
-                  Submit
-                </Button>
+                  Submit amount
+                </button>
               </div>
-              <Button
-                variant="ghost"
-                onClick={() =>
-                  wrap(() => api('/sessions/cancel', { method: 'POST', body: JSON.stringify({}) }))
-                }
-              >
-                Cancel
-              </Button>
-            </div>
-          )}
+            )}
 
-          {state === 'CONFIRM' && session && (
-            <div className="space-y-4 text-center">
-              <Message heading="Confirm withdrawal" />
-              <div className="text-3xl font-semibold">
-                Rp {session.amount?.toLocaleString('id-ID')}
-              </div>
-              <div className="flex gap-3 justify-center">
-                <Button
-                  size="lg"
-                  onClick={() =>
-                    wrap(() => api('/sessions/confirm', { method: 'POST', body: JSON.stringify({}) }))
-                  }
+            {state === 'CONFIRM' && (
+              <div className="space-y-2">
+                <div className="text-center text-lg font-semibold">
+                  Rp {session?.amount?.toLocaleString('id-ID')}
+                </div>
+                <button
+                  onClick={confirmSession}
+                  className="w-full py-2 rounded bg-zegen-accent text-slate-900 font-medium text-sm"
                 >
                   Confirm
-                </Button>
-                <Button
-                  size="lg"
-                  variant="danger"
-                  onClick={() =>
-                    wrap(() => api('/sessions/cancel', { method: 'POST', body: JSON.stringify({}) }))
-                  }
-                >
-                  Cancel
-                </Button>
+                </button>
               </div>
+            )}
+
+            {['PROCESSING', 'DISPENSING', 'PRINTING', 'EJECTING'].includes(state) && (
+              <div className="flex items-center gap-2 text-sm text-slate-400">
+                <span className="w-3 h-3 border-2 border-zegen-accent border-t-transparent rounded-full animate-spin" />
+                {state.toLowerCase()}…
+              </div>
+            )}
+
+            {['PIN_ENTRY', 'MAIN_MENU', 'AMOUNT_ENTRY', 'CONFIRM'].includes(state) && (
+              <button
+                onClick={cancelSession}
+                className="w-full py-2 rounded bg-red-600 text-white text-sm"
+              >
+                Cancel session
+              </button>
+            )}
+
+            {error && (
+              <div className="mt-2 p-2 text-xs rounded bg-red-500/10 border border-red-500/40 text-red-300">
+                {error}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-2">
+            <h2 className="text-xs uppercase tracking-widest text-slate-500">Live events</h2>
+            <div className="max-h-40 overflow-y-auto font-mono text-xs space-y-0.5">
+              {events.slice(0, 20).map((e, i) => (
+                <div key={i} className="flex gap-2">
+                  <span className="text-slate-600 shrink-0">
+                    {new Date(e.timestamp).toLocaleTimeString('id-ID')}
+                  </span>
+                  <span
+                    className={cn(
+                      'truncate',
+                      e.eventClass === 'EXEE' ? 'text-amber-300' : 'text-cyan-300',
+                    )}
+                  >
+                    {e.eventCode}
+                  </span>
+                </div>
+              ))}
+              {events.length === 0 && <div className="text-slate-600">no events yet</div>}
             </div>
-          )}
-
-          {state === 'PROCESSING' && <Spinner label="Authorising with your bank…" />}
-          {state === 'DISPENSING' && <Spinner label="Dispensing cash…" />}
-          {state === 'PRINTING' && <Spinner label="Printing receipt…" />}
-          {state === 'EJECTING' && <Spinner label="Please take your card." />}
-
-          {state === 'ERROR' && (
-            <Message
-              heading="Something went wrong"
-              sub={session?.errorMessage ?? 'Please try again.'}
-              tone="error"
-            />
-          )}
-
-          {state === 'ENDED' && <Message heading="Thank you" sub="Please take your card and cash." />}
-
-          {error && (
-            <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/40 text-red-300 text-sm">
-              {error}
-            </div>
-          )}
-
-          {busy && (
-            <div className="mt-4 text-xs text-slate-500 text-center">Working…</div>
-          )}
-        </div>
+          </div>
+        </aside>
       </main>
-
-      <EventStrip events={events.slice(0, 3)} />
-    </div>
-  );
-}
-
-function IdlePanel() {
-  return (
-    <div className="text-center mb-6">
-      <div className="text-xs uppercase tracking-widest text-zegen-accent mb-2">ATM terminal</div>
-      <h1 className="text-2xl font-semibold">Please insert your card</h1>
-      <p className="text-sm text-slate-400 mt-2">
-        This is a simulator. Choose a virtual card below to begin.
-      </p>
-    </div>
-  );
-}
-
-function Message({
-  heading,
-  sub,
-  tone = 'neutral',
-}: {
-  heading: string;
-  sub?: string;
-  tone?: 'neutral' | 'error';
-}) {
-  return (
-    <div className="text-center">
-      <h2 className={cn('text-2xl font-semibold', tone === 'error' && 'text-red-300')}>{heading}</h2>
-      {sub && <p className="text-slate-400 mt-2">{sub}</p>}
-    </div>
-  );
-}
-
-function Spinner({ label }: { label: string }) {
-  return (
-    <div className="flex flex-col items-center gap-4 py-8">
-      <div className="w-10 h-10 border-4 border-zegen-accent border-t-transparent rounded-full animate-spin" />
-      <div className="text-slate-300">{label}</div>
-    </div>
-  );
-}
-
-function Header({ connected, state }: { connected: boolean; state: string }) {
-  return (
-    <header className="border-b border-slate-800 px-6 py-3 flex items-center justify-between text-xs">
-      <div className="font-mono text-slate-400">
-        state: <span className="text-zegen-accent">{state}</span>
-      </div>
-      <div
-        className={cn(
-          'flex items-center gap-2',
-          connected ? 'text-green-400' : 'text-red-400',
-        )}
-      >
-        <span className="w-2 h-2 rounded-full bg-current" />
-        {connected ? 'connected' : 'disconnected'}
-      </div>
-    </header>
-  );
-}
-
-function EventStrip({ events }: { events: { eventCode: string; timestamp: string }[] }) {
-  if (events.length === 0) return null;
-  return (
-    <div className="border-t border-slate-800 p-3 text-xs text-slate-500 flex gap-3 overflow-x-auto">
-      <span className="text-slate-600 shrink-0">events:</span>
-      {events.map((e, i) => (
-        <span key={i} className="font-mono whitespace-nowrap">
-          {e.eventCode}
-        </span>
-      ))}
     </div>
   );
 }

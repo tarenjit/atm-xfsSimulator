@@ -19,6 +19,34 @@ export const PIN_EVT = {
 
 export type PinEventCode = (typeof PIN_EVT)[keyof typeof PIN_EVT];
 
+/**
+ * FDK (Function Descriptor Key) codes per CEN/XFS.
+ * Hyosung layout: 4 on left (A–D), 4 on right (E–H) of the display.
+ */
+export const FDK_CODES = {
+  FDK_A: 'FDK01', // Top-left
+  FDK_B: 'FDK02',
+  FDK_C: 'FDK03',
+  FDK_D: 'FDK04', // Bottom-left
+  FDK_E: 'FDK05', // Top-right
+  FDK_F: 'FDK06',
+  FDK_G: 'FDK07',
+  FDK_H: 'FDK08', // Bottom-right
+} as const;
+
+export type FdkCode = (typeof FDK_CODES)[keyof typeof FDK_CODES];
+
+export const FDK_SLOTS = [
+  'FDK_A',
+  'FDK_B',
+  'FDK_C',
+  'FDK_D',
+  'FDK_E',
+  'FDK_F',
+  'FDK_G',
+  'FDK_H',
+] as const;
+
 export type PinBlockFormat = 'ISO0' | 'ISO1' | 'ISO3' | 'ANSI';
 
 export interface PinGetPinPayload {

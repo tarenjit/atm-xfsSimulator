@@ -156,3 +156,22 @@ model AtmSession {
   @@index([pan])
   @@index([startedAt])
 }
+
+// ----------------------------------------------------------------------------
+// Bank theme (Update_features.md §8)
+// ----------------------------------------------------------------------------
+
+model BankTheme {
+  id              String   @id @default(cuid())
+  code            String   @unique   // "mandiri", "bsi", "btn", "bni", "bri", "bca"
+  name            String              // "Bank Mandiri"
+  logoUrl         String?             // /themes/mandiri/logo.svg
+  primaryColor   String               // hex, e.g. "#003D79"
+  secondaryColor String
+  accentColor    String
+  defaultLanguage String  @default("id")
+  receiptTemplate String              // Handlebars-ish receipt template
+  isDefault      Boolean @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
