@@ -192,14 +192,16 @@ Every XFS command is persisted to `XfsCommandLog` with duration and result code 
 
 ## Test cards (seeded)
 
-| Scenario       | PAN                | PIN  | Expected                              |
-| -------------- | ------------------ | ---- | ------------------------------------- |
-| Happy path     | `4580123456787234` | 1234 | All transactions succeed              |
-| Low balance    | `4580111122223333` | 0000 | Insufficient funds above Rp 150,000   |
-| Blocked card   | `4580555500001111` | 9999 | `CARD_BLOCKED` on authenticate        |
-| Expired card   | `4580444433332222` | 5678 | Expiry `2001` — `EXPIRED_CARD`        |
+**All PINs are `111111`.** One PIN across every card to keep demos predictable.
 
-PINs are stored as salted SHA-256 via `@atm/shared`'s `hashPin()`; device code verifies with `verifyPin()`.
+| Scenario       | PAN                | PIN      | Expected                              |
+| -------------- | ------------------ | -------- | ------------------------------------- |
+| Happy path     | `4580123456787234` | `111111` | All transactions succeed              |
+| Low balance    | `4580111122223333` | `111111` | Insufficient funds above Rp 150,000   |
+| Blocked card   | `4580555500001111` | `111111` | `CARD_BLOCKED` on authenticate        |
+| Expired card   | `4580444433332222` | `111111` | Expiry `2001` — `EXPIRED_CARD`        |
+
+PINs are stored as salted SHA-256 via `@atm/shared`'s `hashPin()`; device code verifies with `verifyPin()` — the DB never sees plaintext.
 
 ---
 

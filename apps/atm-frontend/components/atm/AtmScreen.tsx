@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useAtmSocket } from '@/hooks/useAtmSocket';
+import { useThemeMode } from '@/hooks/useThemeMode';
 import type { BankTheme, FdkOption, VirtualCardSummary } from '@/types/atm';
 import { HeaderBar } from './HeaderBar';
 import { BankScreen } from './BankScreen';
@@ -26,6 +27,7 @@ const WITHDRAW_FDKS: FdkOption[] = [
 
 export function AtmScreen() {
   const { connected, session, events } = useAtmSocket();
+  const { mode, toggle: toggleMode } = useThemeMode();
   const [theme, setTheme] = useState<BankTheme | null>(null);
   const [cards, setCards] = useState<VirtualCardSummary[]>([]);
   const [selectedPan, setSelectedPan] = useState<string | null>(null);
@@ -86,6 +88,38 @@ export function AtmScreen() {
   const state = session?.state ?? 'IDLE';
   const cardInserted = state !== 'IDLE' && state !== 'ENDED';
 
+  // Auto-start PIN entry the moment state enters PIN_ENTRY. Prevents the UX
+  // trap where users type 1234 before the backend PIN buffer is open.
+  // Ref-gate so StrictMode's double-invoke and sibling re-renders don't
+  // fire the begin-pin POST twice for the same session.
+  const autoPinStartedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (state !== 'PIN_ENTRY') return;
+    if (!session?.id) return;
+    if (autoPinStartedFor.current === session.id) return;
+    autoPinStartedFor.current = session.id;
+    setPinBusy(true);
+    setPinDigits(0);
+    (async () => {
+      try {
+        const r = await api<{ verified: boolean; reason?: string }>('/sessions/begin-pin', {
+          method: 'POST',
+          timeoutMs: 75_000,
+        });
+        if (!r.verified && r.reason) setError(r.reason);
+      } catch (e) {
+        setError(String(e));
+      } finally {
+        setPinBusy(false);
+      }
+    })();
+  }, [state, session?.id]);
+
+  // Reset the PIN-start gate when the session ends.
+  useEffect(() => {
+    if (!session) autoPinStartedFor.current = null;
+  }, [session]);
+
   // --- Actions ---
   const insertCard = async () => {
     if (!selectedPan) {
@@ -98,23 +132,6 @@ export function AtmScreen() {
         body: JSON.stringify({ pan: selectedPan }),
       }),
     );
-  };
-
-  const startPinEntry = async () => {
-    setPinBusy(true);
-    setPinDigits(0);
-    try {
-      // Long timeout because this resolves only after ENTER is pressed.
-      const r = await api<{ verified: boolean; reason?: string }>('/sessions/begin-pin', {
-        method: 'POST',
-        timeoutMs: 75_000,
-      });
-      if (!r.verified && r.reason) setError(r.reason);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setPinBusy(false);
-    }
   };
 
   const pressKey = async (key: string) => {
@@ -219,6 +236,8 @@ export function AtmScreen() {
         model="ATM"
         connected={connected}
         state={state}
+        mode={mode}
+        onToggleMode={toggleMode}
       />
 
       <main className="flex-1 flex flex-col xl:flex-row gap-6 p-6 max-w-7xl w-full mx-auto">
@@ -318,19 +337,15 @@ export function AtmScreen() {
               </>
             )}
 
-            {state === 'PIN_ENTRY' && !pinBusy && (
-              <button
-                onClick={startPinEntry}
-                className="w-full py-2 rounded bg-zegen-accent text-slate-900 font-medium text-sm"
-              >
-                Start PIN entry
-              </button>
-            )}
-
-            {state === 'PIN_ENTRY' && pinBusy && (
-              <div className="text-xs text-slate-400">
-                Enter PIN on the keypad. Press <span className="text-zegen-accent">ENTER</span> to
-                submit, <span className="text-red-400">CANCEL</span> to abort.
+            {state === 'PIN_ENTRY' && (
+              <div className="text-xs text-slate-400 space-y-1">
+                <div>
+                  Enter PIN on the keypad. Press <span className="text-zegen-accent">ENTER</span> to
+                  submit, <span className="text-red-400">CANCEL</span> to abort.
+                </div>
+                <div className="text-slate-500">
+                  (demo PIN for all seeded cards: <span className="font-mono">111111</span>)
+                </div>
               </div>
             )}
 

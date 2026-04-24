@@ -2,13 +2,97 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Theme tokens. Dark is the default; light mode kicks in when
+ * useThemeMode() sets data-theme="light" on <html>.
+ *
+ * CSS custom props keep the token names consistent across components.
+ * Tailwind classes that reference specific slate/zinc shades still work,
+ * but any component reading var(--surface) / var(--surface-muted) /
+ * var(--text) / var(--border) automatically adapts.
+ */
+:root,
+[data-theme='dark'] {
+  --bg: #0a0f1c;
+  --surface: #0f172a; /* slate-900 */
+  --surface-muted: rgba(15, 23, 42, 0.6);
+  --border: #1e293b; /* slate-800 */
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+  --accent: #22d3ee;
+}
+
+[data-theme='light'] {
+  --bg: #f1f5f9;
+  --surface: #ffffff;
+  --surface-muted: rgba(255, 255, 255, 0.8);
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --text-muted: #475569;
+  --text-dim: #64748b;
+  --accent: #0891b2;
+}
+
 html,
 body {
   height: 100%;
-  background: #0a0f1c;
-  color: #e2e8f0;
+  background: var(--bg);
+  color: var(--text);
+  transition: background-color 150ms ease, color 150ms ease;
 }
 
 body {
   font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+/*
+ * Map existing slate-based Tailwind utilities to the token scale when in
+ * light mode. We only override the surfaces/text our components actually
+ * use — the blue bank screen and brand colors stay bank-accurate.
+ */
+[data-theme='light'] .bg-slate-950,
+[data-theme='light'] .bg-slate-900,
+[data-theme='light'] .bg-slate-900\/70,
+[data-theme='light'] .bg-slate-900\/80,
+[data-theme='light'] .bg-slate-900\/60 {
+  background-color: var(--surface) !important;
+}
+
+[data-theme='light'] .bg-slate-800,
+[data-theme='light'] .bg-slate-800\/40,
+[data-theme='light'] .bg-slate-950\/60,
+[data-theme='light'] .bg-slate-950\/80 {
+  background-color: var(--surface-muted) !important;
+}
+
+[data-theme='light'] .border-slate-800,
+[data-theme='light'] .border-slate-700,
+[data-theme='light'] .divide-slate-800 > * + * {
+  border-color: var(--border) !important;
+}
+
+[data-theme='light'] .text-slate-100,
+[data-theme='light'] .text-slate-200,
+[data-theme='light'] .text-slate-300 {
+  color: var(--text) !important;
+}
+
+[data-theme='light'] .text-slate-400,
+[data-theme='light'] .text-slate-500 {
+  color: var(--text-muted) !important;
+}
+
+[data-theme='light'] .text-slate-600 {
+  color: var(--text-dim) !important;
+}
+
+/* Keep keypad contrast readable in light mode. */
+[data-theme='light'] .bg-slate-700 {
+  background-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+[data-theme='light'] .bg-slate-600 {
+  background-color: #94a3b8 !important;
+  color: #0f172a !important;
 }
