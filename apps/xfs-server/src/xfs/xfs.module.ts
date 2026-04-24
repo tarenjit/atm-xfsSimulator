@@ -2,6 +2,7 @@ import { Module, OnModuleInit } from '@nestjs/common';
 import { XfsManagerService } from './xfs-manager.service';
 import { XfsGateway } from './xfs.gateway';
 import { XfsController } from './xfs.controller';
+import { XfsAdminController } from './xfs-admin.controller';
 import {
   CdmDeviceService,
   IdcDeviceService,
@@ -16,7 +17,7 @@ import {
  * singletons and auto-registered with the manager on module init.
  */
 @Module({
-  controllers: [XfsController],
+  controllers: [XfsController, XfsAdminController],
   providers: [
     XfsManagerService,
     XfsGateway,

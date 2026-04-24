@@ -1,31 +1,37 @@
+import { DeviceStatus } from '@/components/operator/DeviceStatus';
+import { CassetteManager } from '@/components/operator/CassetteManager';
+import { CardManager } from '@/components/operator/CardManager';
+import { LogStream } from '@/components/operator/LogStream';
+import { TransactionList } from '@/components/operator/TransactionList';
+
 export default function OperatorPage() {
   return (
-    <main className="min-h-screen p-8">
-      <div className="max-w-5xl mx-auto space-y-6">
-        <header>
-          <div className="text-xs uppercase tracking-widest text-zegen-accent">
-            Operator Console
+    <main className="min-h-screen p-6">
+      <div className="max-w-6xl mx-auto space-y-8">
+        <header className="flex items-end justify-between">
+          <div>
+            <div className="text-xs uppercase tracking-widest text-zegen-accent">
+              Operator Console
+            </div>
+            <h1 className="text-3xl font-semibold">Zegen ATM Simulator</h1>
           </div>
-          <h1 className="text-3xl font-semibold">Device Dashboard</h1>
+          <div className="text-xs text-slate-500">
+            Dashboard, devices, cassettes, cards, logs.
+          </div>
         </header>
 
-        <div className="grid md:grid-cols-3 gap-4">
-          {['IDC (card reader)', 'PIN (pin pad)', 'CDM (cash dispenser)', 'PTR (printer)'].map(
-            (name) => (
-              <div
-                key={name}
-                className="p-4 rounded-lg border border-slate-700 bg-slate-900/60"
-              >
-                <div className="text-sm text-slate-400">{name}</div>
-                <div className="mt-2 text-xs text-slate-500">waiting for Phase 2 wiring…</div>
-              </div>
-            ),
-          )}
+        <div className="grid lg:grid-cols-2 gap-8">
+          <DeviceStatus />
+          <CassetteManager />
+          <LogStream />
+          <TransactionList />
         </div>
 
-        <p className="text-xs text-slate-500 border-t border-slate-800 pt-4">
-          Phase 1 scaffold — full operator console arrives in Phase 5.
-        </p>
+        <CardManager />
+
+        <footer className="text-xs text-slate-600 border-t border-slate-800 pt-4">
+          Phase 5 — operator console. Next: ISO 8583 encoder, session replay, OpenAPI.
+        </footer>
       </div>
     </main>
   );
