@@ -3,35 +3,76 @@
 @tailwind utilities;
 
 /*
- * Theme tokens. Dark is the default; light mode kicks in when
- * useThemeMode() sets data-theme="light" on <html>.
+ * Theme tokens.
  *
- * CSS custom props keep the token names consistent across components.
- * Tailwind classes that reference specific slate/zinc shades still work,
- * but any component reading var(--surface) / var(--surface-muted) /
- * var(--text) / var(--border) automatically adapts.
+ * Two design layers:
+ *   1. Page chrome (background, side panels, header) — responds to
+ *      light/dark toggle. In light mode this flips to clean whites.
+ *   2. ATM fascia (card slot, cash tray, keypad, FDK column rails) —
+ *      stays dark-ish in both modes. Real ATM front panels are always
+ *      dark plastic / brushed metal; a pure-white ATM face looks wrong.
+ *
+ * Components use var(--surface-*) tokens so we never have to touch
+ * individual component files when we tune the palette.
  */
 :root,
 [data-theme='dark'] {
+  /* page chrome */
   --bg: #0a0f1c;
-  --surface: #0f172a; /* slate-900 */
-  --surface-muted: rgba(15, 23, 42, 0.6);
-  --border: #1e293b; /* slate-800 */
+  --surface: #0f172a;
+  --surface-2: rgba(15, 23, 42, 0.6);
+  --surface-hover: #1e293b;
+  --border: #1e293b;
+  --border-strong: #334155;
   --text: #e2e8f0;
   --text-muted: #94a3b8;
   --text-dim: #64748b;
   --accent: #22d3ee;
+  --danger: #ef4444;
+  --success: #22c55e;
+  --warn: #f59e0b;
+
+  /* ATM fascia (front panel plastic) */
+  --fascia: #0b1220;
+  --fascia-2: #131c2e;
+  --fascia-border: #1e293b;
+  --fascia-text: #e2e8f0;
+  --fascia-label: #64748b;
+
+  /* keypad */
+  --key-digit: #334155;
+  --key-digit-hover: #475569;
+  --key-fn: #475569;
+  --key-fn-hover: #64748b;
 }
 
 [data-theme='light'] {
-  --bg: #f1f5f9;
+  --bg: #eef2f7;
   --surface: #ffffff;
-  --surface-muted: rgba(255, 255, 255, 0.8);
+  --surface-2: #f8fafc;
+  --surface-hover: #f1f5f9;
   --border: #e2e8f0;
+  --border-strong: #cbd5e1;
   --text: #0f172a;
   --text-muted: #475569;
   --text-dim: #64748b;
   --accent: #0891b2;
+  --danger: #dc2626;
+  --success: #16a34a;
+  --warn: #d97706;
+
+  /* ATM fascia stays dark in light mode — matches real ATM aesthetic */
+  --fascia: #1e293b;
+  --fascia-2: #0f172a;
+  --fascia-border: #334155;
+  --fascia-text: #f1f5f9;
+  --fascia-label: #94a3b8;
+
+  /* keypad keys a touch brighter so they pop against the fascia */
+  --key-digit: #475569;
+  --key-digit-hover: #64748b;
+  --key-fn: #64748b;
+  --key-fn-hover: #94a3b8;
 }
 
 html,
@@ -46,53 +87,73 @@ body {
   font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
-/*
- * Map existing slate-based Tailwind utilities to the token scale when in
- * light mode. We only override the surfaces/text our components actually
- * use — the blue bank screen and brand colors stay bank-accurate.
- */
-[data-theme='light'] .bg-slate-950,
-[data-theme='light'] .bg-slate-900,
-[data-theme='light'] .bg-slate-900\/70,
-[data-theme='light'] .bg-slate-900\/80,
-[data-theme='light'] .bg-slate-900\/60 {
-  background-color: var(--surface) !important;
+/* ----- Utility aliases wired to tokens ----- */
+
+.chrome-bg {
+  background: var(--bg);
+}
+.chrome-surface {
+  background: var(--surface);
+  border-color: var(--border);
+}
+.chrome-surface-2 {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+.chrome-text {
+  color: var(--text);
+}
+.chrome-muted {
+  color: var(--text-muted);
+}
+.chrome-dim {
+  color: var(--text-dim);
+}
+.chrome-border {
+  border-color: var(--border);
+}
+.chrome-border-strong {
+  border-color: var(--border-strong);
 }
 
-[data-theme='light'] .bg-slate-800,
-[data-theme='light'] .bg-slate-800\/40,
-[data-theme='light'] .bg-slate-950\/60,
-[data-theme='light'] .bg-slate-950\/80 {
-  background-color: var(--surface-muted) !important;
+.fascia {
+  background: var(--fascia);
+  border-color: var(--fascia-border);
+  color: var(--fascia-text);
+}
+.fascia-2 {
+  background: var(--fascia-2);
+  border-color: var(--fascia-border);
+}
+.fascia-label {
+  color: var(--fascia-label);
 }
 
-[data-theme='light'] .border-slate-800,
-[data-theme='light'] .border-slate-700,
-[data-theme='light'] .divide-slate-800 > * + * {
-  border-color: var(--border) !important;
+.key-digit {
+  background: var(--key-digit);
+  color: var(--fascia-text);
+}
+.key-digit:hover {
+  background: var(--key-digit-hover);
+}
+.key-fn {
+  background: var(--key-fn);
+  color: var(--fascia-text);
+}
+.key-fn:hover {
+  background: var(--key-fn-hover);
 }
 
-[data-theme='light'] .text-slate-100,
-[data-theme='light'] .text-slate-200,
-[data-theme='light'] .text-slate-300 {
-  color: var(--text) !important;
+/* Subtle scrollbar styling for log panes */
+[data-theme='light'] ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
 }
-
-[data-theme='light'] .text-slate-400,
-[data-theme='light'] .text-slate-500 {
-  color: var(--text-muted) !important;
+[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
 }
-
-[data-theme='light'] .text-slate-600 {
-  color: var(--text-dim) !important;
-}
-
-/* Keep keypad contrast readable in light mode. */
-[data-theme='light'] .bg-slate-700 {
-  background-color: #cbd5e1 !important;
-  color: #0f172a !important;
-}
-[data-theme='light'] .bg-slate-600 {
-  background-color: #94a3b8 !important;
-  color: #0f172a !important;
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }

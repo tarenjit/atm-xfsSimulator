@@ -96,4 +96,9 @@ export class XfsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   broadcastAtmEnded(event: unknown) {
     this.server.emit('atm.sessionEnded', event);
   }
+
+  @OnEvent('atm.themeChanged')
+  broadcastThemeChanged(event: unknown) {
+    this.server.emit('atm.themeChanged', event);
+  }
 }

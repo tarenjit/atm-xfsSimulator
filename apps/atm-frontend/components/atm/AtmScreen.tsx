@@ -5,7 +5,7 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useAtmSocket } from '@/hooks/useAtmSocket';
 import { useThemeMode } from '@/hooks/useThemeMode';
-import type { BankTheme, FdkOption, VirtualCardSummary } from '@/types/atm';
+import type { FdkOption, VirtualCardSummary } from '@/types/atm';
 import { HeaderBar } from './HeaderBar';
 import { BankScreen } from './BankScreen';
 import { KeypadPanel } from './KeypadPanel';
@@ -26,9 +26,8 @@ const WITHDRAW_FDKS: FdkOption[] = [
 ];
 
 export function AtmScreen() {
-  const { connected, session, events } = useAtmSocket();
+  const { connected, session, events, theme } = useAtmSocket();
   const { mode, toggle: toggleMode } = useThemeMode();
-  const [theme, setTheme] = useState<BankTheme | null>(null);
   const [cards, setCards] = useState<VirtualCardSummary[]>([]);
   const [selectedPan, setSelectedPan] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,22 +35,6 @@ export function AtmScreen() {
   const [customAmount, setCustomAmount] = useState('');
   const [pinDigits, setPinDigits] = useState(0);
   const [pinBusy, setPinBusy] = useState(false);
-
-  // Load active theme and card list at mount.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const t = await api<{ theme: BankTheme }>('/themes/active');
-        if (!cancelled) setTheme(t.theme);
-      } catch {
-        /* backend not ready; rendered with fallback */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -227,7 +210,7 @@ export function AtmScreen() {
   const accent = theme?.accentColor ?? '#FFFFFF';
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950">
+    <div className="min-h-screen flex flex-col chrome-bg">
       <HeaderBar
         deploymentName={theme?.name ?? 'Zegen'}
         atmName="Zegen Virtual ATM"
@@ -241,9 +224,9 @@ export function AtmScreen() {
       />
 
       <main className="flex-1 flex flex-col xl:flex-row gap-6 p-6 max-w-7xl w-full mx-auto">
-        {/* Left column: virtual ATM panel */}
+        {/* Left column: virtual ATM panel with dark fascia */}
         <section className="flex-1 space-y-6">
-          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4">
+          <div className="fascia border rounded-2xl p-4 shadow-2xl">
             {/* Blue screen + FDK columns */}
             <div className="flex items-stretch gap-2">
               <FdkColumn side="left" fdks={fdks.slice(0, 4)} onPress={selectFdk} />
@@ -281,23 +264,23 @@ export function AtmScreen() {
 
         {/* Right column: context panel (action controls for current state) */}
         <aside className="w-full xl:w-80 space-y-4">
-          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-3">
-            <h2 className="text-xs uppercase tracking-widest text-slate-500">Session</h2>
+          <div className="chrome-surface border rounded-xl p-4 space-y-3">
+            <h2 className="text-xs uppercase tracking-widest chrome-dim">Session</h2>
             <dl className="text-xs space-y-1 font-mono">
               <div className="flex justify-between">
-                <dt className="text-slate-500">state</dt>
+                <dt className="chrome-muted">state</dt>
                 <dd className="text-zegen-accent">{state}</dd>
               </div>
               {session?.id && (
                 <div className="flex justify-between">
-                  <dt className="text-slate-500">id</dt>
-                  <dd className="text-slate-300 truncate ml-4">{session.id}</dd>
+                  <dt className="chrome-muted">id</dt>
+                  <dd className="chrome-text truncate ml-4">{session.id}</dd>
                 </div>
               )}
               {session?.amount && (
                 <div className="flex justify-between">
-                  <dt className="text-slate-500">amount</dt>
-                  <dd className="text-slate-200">Rp {session.amount.toLocaleString('id-ID')}</dd>
+                  <dt className="chrome-muted">amount</dt>
+                  <dd className="chrome-text">Rp {session.amount.toLocaleString('id-ID')}</dd>
                 </div>
               )}
               {session?.errorMessage && (
@@ -307,18 +290,18 @@ export function AtmScreen() {
           </div>
 
           {/* State-sensitive action buttons */}
-          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-3">
-            <h2 className="text-xs uppercase tracking-widest text-slate-500">Actions</h2>
+          <div className="chrome-surface border rounded-xl p-4 space-y-3">
+            <h2 className="text-xs uppercase tracking-widest chrome-dim">Actions</h2>
 
             {state === 'IDLE' && (
               <>
-                <div className="text-xs text-slate-400">
+                <div className="text-xs chrome-muted">
                   Pick a virtual card, then press <span className="text-zegen-accent">Insert</span>.
                 </div>
                 <select
                   value={selectedPan ?? ''}
                   onChange={(e) => setSelectedPan(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs"
+                  className="w-full chrome-surface-2 border rounded px-2 py-1 text-xs chrome-text"
                 >
                   {cards.length === 0 && <option value="">loading…</option>}
                   {cards.map((c) => (
@@ -338,22 +321,19 @@ export function AtmScreen() {
             )}
 
             {state === 'PIN_ENTRY' && (
-              <div className="text-xs text-slate-400 space-y-1">
+              <div className="text-xs chrome-muted space-y-1">
                 <div>
                   Enter PIN on the keypad. Press <span className="text-zegen-accent">ENTER</span> to
-                  submit, <span className="text-red-400">CANCEL</span> to abort.
+                  submit, <span className="text-red-500">CANCEL</span> to abort.
                 </div>
-                <div className="text-slate-500">
+                <div className="chrome-dim">
                   (demo PIN for all seeded cards: <span className="font-mono">111111</span>)
                 </div>
               </div>
             )}
 
             {state === 'MAIN_MENU' && (
-              <button
-                onClick={balanceInquiry}
-                className="w-full py-2 rounded bg-slate-700 text-slate-100 text-sm"
-              >
+              <button onClick={balanceInquiry} className="w-full py-2 rounded key-digit text-sm">
                 Balance inquiry
               </button>
             )}
@@ -366,7 +346,7 @@ export function AtmScreen() {
                   min={20_000}
                   value={customAmount}
                   onChange={(e) => setCustomAmount(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
+                  className="w-full chrome-surface-2 border rounded px-2 py-1 text-sm chrome-text"
                   placeholder="Amount (×20,000)"
                 />
                 <button
@@ -394,7 +374,7 @@ export function AtmScreen() {
             )}
 
             {['PROCESSING', 'DISPENSING', 'PRINTING', 'EJECTING'].includes(state) && (
-              <div className="flex items-center gap-2 text-sm text-slate-400">
+              <div className="flex items-center gap-2 text-sm chrome-muted">
                 <span className="w-3 h-3 border-2 border-zegen-accent border-t-transparent rounded-full animate-spin" />
                 {state.toLowerCase()}…
               </div>
@@ -416,12 +396,12 @@ export function AtmScreen() {
             )}
           </div>
 
-          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-2">
-            <h2 className="text-xs uppercase tracking-widest text-slate-500">Live events</h2>
+          <div className="chrome-surface border rounded-xl p-4 space-y-2">
+            <h2 className="text-xs uppercase tracking-widest chrome-dim">Live events</h2>
             <div className="max-h-40 overflow-y-auto font-mono text-xs space-y-0.5">
               {events.slice(0, 20).map((e, i) => (
                 <div key={i} className="flex gap-2">
-                  <span className="text-slate-600 shrink-0">
+                  <span className="chrome-dim shrink-0">
                     {new Date(e.timestamp).toLocaleTimeString('id-ID')}
                   </span>
                   <span
@@ -434,7 +414,7 @@ export function AtmScreen() {
                   </span>
                 </div>
               ))}
-              {events.length === 0 && <div className="text-slate-600">no events yet</div>}
+              {events.length === 0 && <div className="chrome-dim">no events yet</div>}
             </div>
           </div>
         </aside>

@@ -12,6 +12,9 @@ interface Props {
 /**
  * Column of 4 Function Descriptor Keys alongside the blue screen.
  * Reference: ATMirage / Hyosung layout = 4 on each side.
+ *
+ * FDKs sit on the fascia, so they always use fascia colors — the page
+ * light/dark toggle doesn't touch them.
  */
 export function FdkColumn({ side, fdks, onPress }: Props) {
   return (
@@ -23,11 +26,11 @@ export function FdkColumn({ side, fdks, onPress }: Props) {
           disabled={!fdk.enabled}
           title={fdk.label || fdk.slot}
           className={cn(
-            'w-8 h-10 rounded-md border-2 transition-colors',
+            'w-8 h-10 rounded-md border-2 transition-colors shadow-inner',
             side === 'left' ? 'border-r-zegen-accent' : 'border-l-zegen-accent',
             fdk.enabled
-              ? 'border-slate-600 hover:border-zegen-accent hover:bg-slate-800 cursor-pointer'
-              : 'border-slate-800 opacity-40 cursor-not-allowed',
+              ? 'border-slate-500 bg-slate-700 hover:border-zegen-accent hover:bg-slate-600 cursor-pointer'
+              : 'border-slate-700 bg-slate-800 opacity-50 cursor-not-allowed',
           )}
         />
       ))}

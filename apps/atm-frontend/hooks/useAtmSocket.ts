@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
-import type { AtmSession } from '@/types/atm';
+import { api } from '@/lib/api';
+import type { AtmSession, BankTheme } from '@/types/atm';
 
 export interface AtmEventFrame {
   hService: string;
@@ -15,17 +16,32 @@ export interface AtmEventFrame {
 
 /**
  * Subscribes to the xfs-server websocket for:
- *   - atm.stateChanged      → session state
- *   - atm.sessionEnded      → session wrap-up
- *   - xfs.event             → device events (informational)
+ *   - atm.stateChanged   → session state
+ *   - atm.sessionEnded   → session wrap-up
+ *   - atm.themeChanged   → active bank theme swap (triggers re-fetch)
+ *   - xfs.event          → device events (informational)
  *
- * Returns live session + last 100 events.
+ * Returns live session, last 100 events, and the active theme.
  */
 export function useAtmSocket(url = process.env.NEXT_PUBLIC_WS_URL ?? 'http://localhost:3001') {
   const socketRef = useRef<Socket | null>(null);
   const [connected, setConnected] = useState(false);
   const [session, setSession] = useState<AtmSession | null>(null);
   const [events, setEvents] = useState<AtmEventFrame[]>([]);
+  const [theme, setTheme] = useState<BankTheme | null>(null);
+
+  const reloadTheme = useCallback(async () => {
+    try {
+      const r = await api<{ theme: BankTheme }>('/themes/active');
+      setTheme(r.theme);
+    } catch {
+      /* backend down — leave existing theme */
+    }
+  }, []);
+
+  useEffect(() => {
+    void reloadTheme();
+  }, [reloadTheme]);
 
   useEffect(() => {
     const socket = io(`${url}/xfs`, {
@@ -46,6 +62,10 @@ export function useAtmSocket(url = process.env.NEXT_PUBLIC_WS_URL ?? 'http://loc
     socket.on('atm.sessionEnded', () => {
       setSession(null);
     });
+    socket.on('atm.themeChanged', (frame: { theme?: BankTheme }) => {
+      if (frame?.theme) setTheme(frame.theme);
+      else void reloadTheme();
+    });
     socket.on('xfs.event', (ev: AtmEventFrame) => {
       setEvents((prev) => [ev, ...prev].slice(0, 100));
     });
@@ -53,7 +73,7 @@ export function useAtmSocket(url = process.env.NEXT_PUBLIC_WS_URL ?? 'http://loc
     return () => {
       socket.close();
     };
-  }, [url]);
+  }, [url, reloadTheme]);
 
-  return { connected, session, events, socket: socketRef.current };
+  return { connected, session, events, theme, socket: socketRef.current };
 }

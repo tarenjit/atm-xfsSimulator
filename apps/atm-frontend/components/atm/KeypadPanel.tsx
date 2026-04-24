@@ -37,7 +37,7 @@ export function KeypadPanel({ onKey }: Props) {
 
   return (
     <div
-      className="grid grid-cols-4 gap-2 p-4 rounded-xl bg-slate-800/40 border border-slate-700"
+      className="grid grid-cols-4 gap-2 p-4 rounded-xl fascia-2 border-2 shadow-inner"
       style={{ width: 'fit-content' }}
     >
       {digit('1')}
@@ -77,9 +77,9 @@ function KeypadKey({
     <button
       onClick={onClick}
       className={cn(
-        'w-14 h-14 rounded font-mono font-semibold text-sm flex items-center justify-center transition-colors',
-        kind === 'digit' && 'bg-slate-700 text-slate-100 hover:bg-slate-600',
-        kind === 'fn' && 'bg-slate-600 text-slate-100 hover:bg-slate-500 text-xs',
+        'w-14 h-14 rounded font-mono font-semibold text-sm flex items-center justify-center transition-colors shadow-md active:translate-y-px active:shadow-sm',
+        kind === 'digit' && 'key-digit',
+        kind === 'fn' && 'key-fn text-xs',
         kind === 'cancel' && 'bg-red-600 text-white hover:bg-red-500 text-xs',
         kind === 'enter' && 'bg-green-600 text-white hover:bg-green-500 text-xs',
       )}

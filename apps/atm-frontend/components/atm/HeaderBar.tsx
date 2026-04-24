@@ -27,37 +27,34 @@ export function HeaderBar({
   onToggleMode,
 }: Props) {
   return (
-    <header className="border-b border-slate-800 bg-slate-900/80 px-5 py-3 flex items-center justify-between text-xs">
+    <header className="border-b chrome-surface px-5 py-3 flex items-center justify-between text-xs backdrop-blur-sm">
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded bg-zegen-accent flex items-center justify-center font-bold text-slate-900">
+        <div className="w-8 h-8 rounded bg-zegen-accent flex items-center justify-center font-bold text-slate-900 shadow">
           Z
         </div>
         <div>
-          <div className="font-semibold text-slate-100">ATMirror</div>
-          <div className="text-slate-500">{deploymentName}</div>
+          <div className="font-semibold chrome-text">ATMirror</div>
+          <div className="chrome-dim">{deploymentName}</div>
         </div>
       </div>
 
-      <div className="hidden md:flex flex-1 items-center justify-center gap-2 font-mono text-slate-400">
+      <div className="hidden md:flex flex-1 items-center justify-center gap-2 font-mono chrome-muted">
         <span>{atmName}</span>
-        <span className="text-slate-600">({atmIp})</span>
-        <span className="text-slate-500">
+        <span className="chrome-dim">({atmIp})</span>
+        <span className="chrome-muted">
           {vendor}/{model}
         </span>
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="font-mono">
+        <div className="font-mono chrome-muted">
           state: <span className="text-zegen-accent">{state}</span>
         </div>
 
         <ThemeToggle mode={mode} onToggle={onToggleMode} />
 
         <div
-          className={cn(
-            'flex items-center gap-2',
-            connected ? 'text-green-400' : 'text-red-400',
-          )}
+          className={cn('flex items-center gap-2', connected ? 'text-green-500' : 'text-red-500')}
         >
           <span className="w-2 h-2 rounded-full bg-current" />
           {connected ? 'connected' : 'disconnected'}
