@@ -1,9 +1,14 @@
 /**
- * ISO 8583 minimal surface for Phase 1.
+ * ISO 8583 surface.
  *
- * The full MTI (0100, 0200, 0400, 0800) encoders land in Phase 6. For now we
- * expose the enums and response-code helpers the host emulator depends on.
+ * Phase 1 exposed MTI enums + response codes.
+ * Phase 6 adds a working encoder/decoder with primary bitmap and the
+ * common ATM field subset (2, 3, 4, 7, 11, 12, 13, 14, 22, 37-42, 49, 52,
+ * 54, 70).
  */
+export * from './fields';
+export * from './bitmap';
+export * from './codec';
 
 export enum IsoMti {
   AUTH_REQUEST = '0100',
