@@ -5,6 +5,7 @@
   "description": "Virtual ATM Simulator with XFS Device Emulation Layer (PT Zegen Solusi Mandiri)",
   "scripts": {
     "dev": "turbo run dev",
+    "serve": "turbo run serve --filter=@atm/atm-frontend --filter=@atm/xfs-server",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",

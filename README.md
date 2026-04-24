@@ -58,7 +58,9 @@ pnpm install
 cp .env.example .env                          # adjust DATABASE_URL if needed
 pnpm prisma migrate dev --schema=prisma/schema.prisma --name init
 pnpm db:seed
-pnpm dev
+pnpm serve        # for demos + day-to-day usage (recommended)
+# ── or ──
+pnpm dev          # only when actively editing code
 ```
 
 Open:
@@ -67,6 +69,24 @@ Open:
 - Operator console <http://localhost:3000/operator>
 - Backend health   <http://localhost:3001/api/v1/health>
 - OpenAPI docs     <http://localhost:3001/docs>
+
+---
+
+## `serve` vs `dev` — which to use?
+
+**`pnpm serve` (recommended for demos, QA, live use):**
+- Production build. Next.js output is hash-named (`layout.c124e6d3a337d572.css`) and cached forever.
+- The URL never changes between page loads, so refreshing the browser always works.
+- No Hot Module Replacement → no CSS 404s when you wiggle a file.
+- Slightly slower to start (one-time `next build` + `nest build`).
+- Re-run `pnpm serve` after a commit to pick up changes.
+
+**`pnpm dev` (only when actively editing):**
+- Hot reload, watch mode, instant rebuild on save.
+- Next 14's dev server regenerates a `?v=TIMESTAMP` query param on the CSS and JS URLs on every HTML render. If you edit files while the browser has a stale page, the new URL 404s and you see an unstyled page. Fix: hard-refresh (Cmd+Shift+R) or switch to `pnpm serve`.
+- Turbopack / webpack caches in `.next` and `node_modules/.cache` can get torn by parallel file writes; the `dev` script auto-purges both on startup.
+
+Rule of thumb: if you're not editing code, run `pnpm serve`.
 
 ---
 
