@@ -16,9 +16,16 @@
 // Allow the source to at least parse on macOS/Linux for IDE tooling;
 // real builds must be on Windows with the XFS SDK.
 typedef void* HSERVICE;
+typedef void* HWND;
+typedef void* HPROVIDER;
 typedef long  HRESULT;
 typedef unsigned long DWORD;
 typedef unsigned short WORD;
+// __declspec is MSVC-specific; expand to empty on other compilers so
+// the header parses during IDE indexing / cross-platform syntax checks.
+#ifndef __declspec
+#define __declspec(x)
+#endif
 #endif
 
 #ifdef __cplusplus

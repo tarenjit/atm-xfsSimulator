@@ -1,8 +1,16 @@
 # @atm/xfs-dll (ZegenXFS.dll)
 
-> **Status:** Phase 8c skeleton. Builds on Windows only.
-> **Tooling:** Visual Studio 2022 (v143 toolset), Windows SDK 10.0.22621,
-> CEN/XFS SDK 3.30 headers (customer-provided, not in repo due to licensing).
+> **Status:** Phase 8c.2 — marshallers + event router + INI loader in place.
+> Builds on Windows only.
+> **Tooling:** Visual Studio 2022 (v143 toolset), Windows SDK 10.0.22621.
+> **CEN/XFS SDK 3.30 headers:** free download from [CEN-CENELEC](https://www.cencenelec.eu/areas-of-work/xfs_cwa16926_330_release/)
+> (installer zip on that page). Practical GitHub mirrors with the same headers:
+> [becrux/xfspp](https://github.com/becrux/xfspp) (MIT),
+> [sergiofst/wosa-xfs-spi-base-framework](https://github.com/sergiofst/wosa-xfs-spi-base-framework),
+> [vallejocc/PoC-Fake-Msxfs](https://github.com/vallejocc/PoC-Fake-Msxfs).
+> Drop the headers into `third_party/cen-xfs-3.30/` on the build host and
+> delete `src/wfs_shadow_types.h` — the marshallers compile against the
+> real typedefs without change.
 
 The Windows Service Provider DLL that a customer's ghost ATM VM loads
 through the Windows XFS Manager in place of a vendor-provided hardware
@@ -17,8 +25,13 @@ the ATMirror backend (`xfs-server`) running on the shared Linux host.
 | ----------------------------- | ------------------------------------------- |
 | `src/dllmain.cpp`             | DLL entry points + WFP* export surface      |
 | `src/bridge_client.{h,cpp}`   | TCP client + ZXFS framing                   |
+| `src/wfs_codec.{h,cpp}`       | Command-code map + per-command marshallers |
+| `src/wfs_shadow_types.h`      | CEN/XFS 3.30 shadow structs (remove when SDK is on the build host) |
+| `src/mini_json.h`             | Header-only JSON builder + minimal reader  |
 | `src/event_router.{h,cpp}`    | Translates ZXFS events → `WFMPostMessage`   |
+| `src/ini_config.{h,cpp}`      | `ZegenXFS.ini` loader                       |
 | `include/zegen_xfs.h`         | Public C API                                |
+| `ZegenXFS.ini.example`        | Sample config with defaults                 |
 | `ZegenXFS.vcxproj`            | MSBuild project file (to be added)          |
 | `register-spi.reg`            | Windows SPI registry hook (to be added)     |
 | `ZXFS_PROTOCOL.md`            | Network protocol spec (frozen)              |

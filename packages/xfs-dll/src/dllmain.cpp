@@ -10,6 +10,8 @@
 
 #include "../include/zegen_xfs.h"
 #include "bridge_client.h"
+#include "event_router.h"
+#include "ini_config.h"
 #include "wfs_codec.h"
 
 #include <map>
@@ -33,18 +35,23 @@ struct ServiceBinding {
 std::map<HSERVICE, ServiceBinding> g_services;
 std::mutex g_services_mtx;
 
+zegen::wfs::IniConfig g_ini;
+uint32_t g_request_timeout_ms = 30000;
+
 void ensure_bridge() {
-    if (!g_bridge) {
-        zegen::BridgeConfig cfg;
-        // TODO: load from ZegenXFS.ini (Phase 8c.2).
-        g_bridge = std::make_unique<zegen::BridgeClient>(cfg);
-        g_bridge->connect();
-        g_bridge->on_event([](const std::string& json) {
-            // TODO: parse event, dispatch via WFMPostMessage to the
-            // registered HWND set (event_router module — Phase 8c.2).
-            (void)json;
-        });
-    }
+    if (g_bridge) return;
+
+    g_ini = zegen::wfs::load_ini();
+    zegen::BridgeConfig cfg;
+    cfg.host = g_ini.bridge_host;
+    cfg.port = g_ini.bridge_port;
+    g_request_timeout_ms = g_ini.request_timeout_ms;
+
+    g_bridge = std::make_unique<zegen::BridgeClient>(cfg);
+    g_bridge->connect();
+    g_bridge->on_event([](const std::string& json) {
+        zegen::wfs::EventRouter::instance().dispatch(json);
+    });
 }
 
 // Extract a JSON string field without a full JSON parser — matches the
@@ -100,6 +107,7 @@ HRESULT WFPClose(HSERVICE hService, HWND /*hWnd*/, DWORD /*ReqID*/) {
         if (it != g_services.end()) h_service = it->second.h_service;
         g_services.erase(hService);
     }
+    zegen::wfs::EventRouter::instance().clear_service(hService);
     auto resp = g_bridge->send_request("WFPClose", "", h_service, "", "{}", 5000);
     return resp.result;
 }
@@ -163,8 +171,27 @@ HRESULT WFPExecute(
 }
 
 HRESULT WFPCancelAsyncRequest(HSERVICE /*hService*/, DWORD /*ReqID*/) { return 0; }
-HRESULT WFPRegister(HSERVICE, DWORD, HWND, HWND, DWORD)              { return 0; }
-HRESULT WFPDeregister(HSERVICE, DWORD, HWND, HWND, DWORD)            { return 0; }
+
+HRESULT WFPRegister(HSERVICE hService, DWORD dwEventClass,
+                    HWND hWndReg, HWND /*hWnd*/, DWORD /*ReqID*/) {
+    std::string logical_name;
+    {
+        std::lock_guard<std::mutex> lock(g_services_mtx);
+        auto it = g_services.find(hService);
+        if (it != g_services.end()) logical_name = it->second.h_service;
+    }
+    zegen::wfs::EventRouter::instance().register_window(
+        hService, logical_name, hWndReg, static_cast<uint32_t>(dwEventClass));
+    return 0;
+}
+
+HRESULT WFPDeregister(HSERVICE hService, DWORD dwEventClass,
+                      HWND hWndReg, HWND /*hWnd*/, DWORD /*ReqID*/) {
+    zegen::wfs::EventRouter::instance().deregister_window(
+        hService, hWndReg, static_cast<uint32_t>(dwEventClass));
+    return 0;
+}
+
 HRESULT WFPLock(HSERVICE, DWORD, HWND, DWORD)                        { return 0; }
 HRESULT WFPUnlock(HSERVICE, HWND, DWORD)                             { return 0; }
 

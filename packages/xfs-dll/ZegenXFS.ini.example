@@ -1,0 +1,37 @@
+; ZegenXFS.ini — configuration for ZegenXFS.dll
+;
+; Install location (recommended):
+;   C:\ProgramData\Zegen\ATMirror\ZegenXFS.ini
+;
+; The DLL searches for this file in order:
+;   1. %ZEGEN_XFS_INI% env var (absolute path override)
+;   2. ZegenXFS.ini in the process cwd
+;   3. %ProgramData%\Zegen\ZegenXFS.ini
+;   4. %WINDIR%\System32\ZegenXFS.ini   (WOSA convention)
+;
+; Missing file or missing keys = defaults below.
+
+[Bridge]
+; xfs-server host and port. Point at the Linux host that runs ATMirror.
+Host               = 127.0.0.1
+Port               = 9101
+
+; Initial connect timeout (ms) and per-request timeout (ms).
+ConnectTimeoutMs   = 5000
+RequestTimeoutMs   = 30000
+
+[Trace]
+; DEBUG | INFO | WARN | ERROR
+Level              = INFO
+; Optional; empty disables file logging.
+LogFile            = C:\ProgramData\Zegen\ATMirror\logs\ZegenXFS.log
+
+[Services]
+; Vendor logical names → backend service class.
+; The DLL falls back to parsing the last 3 chars of the logical name
+; (e.g. "IDC30" → "IDC") if the name isn't listed here — so most
+; deployments leave this section untouched.
+IDC30              = IDC
+PIN30              = PIN
+CDM30              = CDM
+PTR30              = PTR
