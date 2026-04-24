@@ -4,7 +4,7 @@
   "private": true,
   "description": "Next.js 14 ATM screen + operator console for the XFS simulator.",
   "scripts": {
-    "dev": "rm -rf .next && next dev -p 3000",
+    "dev": "rm -rf .next node_modules/.cache && next dev -p 3000",
     "build": "next build",
     "start": "next start -p 3000",
     "typecheck": "tsc --noEmit",
