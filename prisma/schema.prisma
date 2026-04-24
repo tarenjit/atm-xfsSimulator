@@ -207,8 +207,40 @@ model MacroRun {
   startedAt   DateTime  @default(now())
   completedAt DateTime?
   durationMs  Int?
+  suiteRunId  String?
+  suiteRun    MacroSuiteRun? @relation(fields: [suiteRunId], references: [id], onDelete: SetNull)
 
   @@index([macroId])
+  @@index([status])
+  @@index([startedAt])
+  @@index([suiteRunId])
+}
+
+model MacroSuite {
+  id         String            @id @default(cuid())
+  name       String            @unique
+  macroIds   String[]          @default([])
+  cron       String?           // standard 5-field cron, null = on-demand only
+  enabled    Boolean           @default(true)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  runs       MacroSuiteRun[]
+
+  @@index([enabled])
+}
+
+model MacroSuiteRun {
+  id          String     @id @default(cuid())
+  suiteId     String
+  suite       MacroSuite @relation(fields: [suiteId], references: [id], onDelete: Cascade)
+  status      String     // RUNNING, PASSED, FAILED, ABORTED
+  triggeredBy String     // CRON, MANUAL
+  startedAt   DateTime   @default(now())
+  completedAt DateTime?
+  durationMs  Int?
+  macroRuns   MacroRun[]
+
+  @@index([suiteId])
   @@index([status])
   @@index([startedAt])
 }

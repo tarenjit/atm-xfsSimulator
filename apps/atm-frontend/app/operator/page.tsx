@@ -6,6 +6,7 @@ import { TransactionList } from '@/components/operator/TransactionList';
 import { SessionHistory } from '@/components/operator/SessionHistory';
 import { ThemeSwitcher } from '@/components/operator/ThemeSwitcher';
 import { MacroStudio } from '@/components/operator/MacroStudio';
+import { SuitePanel } from '@/components/operator/SuitePanel';
 
 export default function OperatorPage() {
   return (
@@ -26,6 +27,8 @@ export default function OperatorPage() {
         <ThemeSwitcher />
 
         <MacroStudio />
+
+        <SuitePanel />
 
         <div className="grid lg:grid-cols-2 gap-8">
           <DeviceStatus />

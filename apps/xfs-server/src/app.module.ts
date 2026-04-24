@@ -14,6 +14,7 @@ import { CassettesModule } from './cassettes/cassettes.module';
 import { LogsModule } from './logs/logs.module';
 import { ThemesModule } from './themes/themes.module';
 import { MacrosModule } from './macros/macros.module';
+import { SuitesModule } from './suites/suites.module';
 import { BridgeModule } from './bridge/bridge.module';
 
 @Module({
@@ -37,6 +38,7 @@ import { BridgeModule } from './bridge/bridge.module';
     LogsModule,
     ThemesModule,
     MacrosModule,
+    SuitesModule,
     BridgeModule,
   ],
 })
