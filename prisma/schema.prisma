@@ -175,3 +175,40 @@ model BankTheme {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
+
+// ----------------------------------------------------------------------------
+// Macro Test Studio (Update_features.md §4)
+// ----------------------------------------------------------------------------
+
+model Macro {
+  id          String     @id @default(cuid())
+  name        String
+  folder      String?    // e.g. "Logins", "Withdrawals"
+  description String?
+  tags        String[]   @default([])
+  steps       Json       // MacroStep[]
+  variables   Json       @default("{}")
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  runs        MacroRun[]
+
+  @@index([folder])
+  @@index([name])
+}
+
+model MacroRun {
+  id          String    @id @default(cuid())
+  macroId     String
+  macro       Macro     @relation(fields: [macroId], references: [id], onDelete: Cascade)
+  status      String    // RUNNING, PASSED, FAILED, ABORTED
+  currentStep Int?
+  stepResults Json      @default("[]")
+  evidence    Json?     // { screenshots, commandLog, receipts }
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  durationMs  Int?
+
+  @@index([macroId])
+  @@index([status])
+  @@index([startedAt])
+}

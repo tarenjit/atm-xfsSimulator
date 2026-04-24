@@ -141,6 +141,15 @@ export class PinDeviceService extends VirtualDeviceBase {
     return this.pinBuffer.length;
   }
 
+  /**
+   * True when the device has armed a PIN/DATA entry and is waiting for
+   * keystrokes. Used by the macro runner to avoid racing pressKey ahead
+   * of the XFS simulateDelay + beginPinEntry setup.
+   */
+  isEntryActive(): boolean {
+    return this.active !== null;
+  }
+
   /** Used by ATM app to verify entered PIN against a card's hash. */
   extractEnteredPin(): string {
     const out = this.pinBuffer;

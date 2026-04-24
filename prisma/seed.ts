@@ -26,6 +26,8 @@ async function main() {
   await prisma.account.deleteMany();
   await prisma.cashUnit.deleteMany();
   await prisma.bankTheme.deleteMany();
+  await prisma.macroRun.deleteMany();
+  await prisma.macro.deleteMany();
 
   // --- Accounts ---
   const happyAccount = await prisma.account.create({
@@ -214,6 +216,110 @@ async function main() {
     ],
   });
 
+  // --- Demo macro (Update_features.md §4.1 reference flow) ---
+  await prisma.macro.create({
+    data: {
+      name: 'Happy-path withdrawal (300,000)',
+      folder: 'Withdrawals',
+      description:
+        'Insert Mandiri card 4580…7234, enter PIN 111111, select WITHDRAWAL, withdraw Rp 300.000, confirm.',
+      tags: ['smoke', 'withdrawal', 'demo'],
+      steps: [
+        {
+          id: 's1',
+          order: 1,
+          kind: 'ACTION',
+          device: 'Card',
+          operation: 'Select',
+          parameters: [
+            {
+              name: 'pan',
+              type: 'string',
+              value: '4580123456787234',
+              displayLabel: 'Mandiri Only Tracks',
+            },
+          ],
+          enabled: true,
+        },
+        {
+          id: 's2',
+          order: 2,
+          kind: 'CHECKPOINT',
+          device: 'Card',
+          operation: 'Checkpoint(Insert)',
+          parameters: [],
+          enabled: false,
+        },
+        {
+          id: 's3',
+          order: 3,
+          kind: 'ACTION',
+          device: 'Card',
+          operation: 'Insert',
+          parameters: [],
+          enabled: true,
+        },
+        {
+          id: 's4',
+          order: 4,
+          kind: 'CHECKPOINT',
+          device: 'Card',
+          operation: 'Checkpoint(ReadTracks-1-2-3)',
+          parameters: [],
+          enabled: true,
+        },
+        {
+          id: 's5',
+          order: 5,
+          kind: 'ACTION',
+          device: 'PinPad',
+          operation: 'EnterPin',
+          parameters: [
+            { name: 'pin', type: 'variable', value: 'Card.pin', displayLabel: '111111' },
+          ],
+          enabled: true,
+        },
+        {
+          id: 's6',
+          order: 6,
+          kind: 'ACTION',
+          device: 'System',
+          operation: 'SelectTransaction',
+          parameters: [{ name: 'txnType', type: 'string', value: 'WITHDRAWAL' }],
+          enabled: true,
+        },
+        {
+          id: 's7',
+          order: 7,
+          kind: 'ACTION',
+          device: 'System',
+          operation: 'SubmitAmount',
+          parameters: [{ name: 'amount', type: 'number', value: 300_000 }],
+          enabled: true,
+        },
+        {
+          id: 's8',
+          order: 8,
+          kind: 'ACTION',
+          device: 'System',
+          operation: 'Confirm',
+          parameters: [],
+          enabled: true,
+        },
+        {
+          id: 's9',
+          order: 9,
+          kind: 'CHECKPOINT',
+          device: 'Receipt',
+          operation: 'Checkpoint(Printed)',
+          parameters: [],
+          enabled: true,
+        },
+      ] as unknown as object,
+      variables: {} as unknown as object,
+    },
+  });
+
   // eslint-disable-next-line no-console
   console.log('[seed] Seed complete:');
   // eslint-disable-next-line no-console
@@ -222,6 +328,8 @@ async function main() {
   console.log(`  - 4 cash units (CASS1=100k, CASS2=50k, CASS3=20k, REJECT)`);
   // eslint-disable-next-line no-console
   console.log(`  - 7 bank themes (mandiri default)`);
+  // eslint-disable-next-line no-console
+  console.log(`  - 1 demo macro (Happy-path withdrawal 300,000)`);
 }
 
 main()

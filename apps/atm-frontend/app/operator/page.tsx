@@ -5,6 +5,7 @@ import { LogStream } from '@/components/operator/LogStream';
 import { TransactionList } from '@/components/operator/TransactionList';
 import { SessionHistory } from '@/components/operator/SessionHistory';
 import { ThemeSwitcher } from '@/components/operator/ThemeSwitcher';
+import { MacroStudio } from '@/components/operator/MacroStudio';
 
 export default function OperatorPage() {
   return (
@@ -18,11 +19,13 @@ export default function OperatorPage() {
             <h1 className="text-3xl font-semibold chrome-text">Zegen ATM Simulator</h1>
           </div>
           <div className="text-xs chrome-dim">
-            Dashboard, themes, devices, cassettes, cards, logs, replay.
+            Dashboard, themes, macros, devices, cassettes, cards, logs, replay.
           </div>
         </header>
 
         <ThemeSwitcher />
+
+        <MacroStudio />
 
         <div className="grid lg:grid-cols-2 gap-8">
           <DeviceStatus />
@@ -36,7 +39,8 @@ export default function OperatorPage() {
         <CardManager />
 
         <footer className="text-xs chrome-dim border-t chrome-border pt-4">
-          Phase 8a.2 — click any bank theme to re-theme the live ATM widget.
+          Phase 8b — Macro Test Studio live. Click ▶ Play on a macro to run it against the current
+          ATM.
         </footer>
       </div>
     </main>
