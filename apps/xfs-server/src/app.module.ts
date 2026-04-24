@@ -14,6 +14,7 @@ import { CassettesModule } from './cassettes/cassettes.module';
 import { LogsModule } from './logs/logs.module';
 import { ThemesModule } from './themes/themes.module';
 import { MacrosModule } from './macros/macros.module';
+import { BridgeModule } from './bridge/bridge.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { MacrosModule } from './macros/macros.module';
     LogsModule,
     ThemesModule,
     MacrosModule,
+    BridgeModule,
   ],
 })
 export class AppModule {}

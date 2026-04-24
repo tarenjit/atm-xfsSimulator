@@ -1,0 +1,14 @@
+{
+  "name": "@atm/xfs-dll",
+  "version": "0.1.0-skeleton",
+  "private": true,
+  "description": "Windows XFS Service Provider DLL (ZegenXFS.dll) — Phase 8c skeleton. C++ source reference; not buildable on macOS/Linux.",
+  "scripts": {
+    "build": "echo 'xfs-dll: Windows-only; skip on this platform' && exit 0",
+    "dev": "echo 'xfs-dll: Windows-only; skip on this platform' && exit 0",
+    "lint": "echo 'xfs-dll: no lint for C++ sources in this workspace' && exit 0",
+    "typecheck": "echo 'xfs-dll: no TypeScript to check' && exit 0",
+    "test": "echo 'xfs-dll: no tests on this platform' && exit 0",
+    "clean": "echo 'xfs-dll: nothing to clean'"
+  }
+}
