@@ -1,0 +1,22 @@
+; ZegenXFS_SP.def — DLL exports for the XFS Service Provider Interface
+; per CEN/XFS 3.30 §B (SPI surface).
+;
+; The Windows XFS Manager (msxfs.dll) calls these by name once our DLL is
+; registered under HKLM\SOFTWARE\XFS\SERVICE_PROVIDERS\<provider>. Every
+; export must be present even if it returns WFS_ERR_NOT_IMPLEMENTED — a
+; missing export prevents the SP from loading at all.
+;
+; Architecture_v3.md §5.1.
+
+LIBRARY ZegenXFS_SP
+EXPORTS
+  WFPOpen                @1
+  WFPClose               @2
+  WFPLock                @3
+  WFPUnlock              @4
+  WFPExecute             @5
+  WFPGetInfo             @6
+  WFPCancelAsyncRequest  @7
+  WFPRegister            @8
+  WFPDeregister          @9
+  WFPSetTraceLevel       @10

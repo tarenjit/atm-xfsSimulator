@@ -17,7 +17,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "codegen": "tsx generators/ts-codegen.ts && tsx generators/cpp-codegen.ts",
-    "codegen:check": "tsx generators/ts-codegen.ts && tsx generators/cpp-codegen.ts && git diff --exit-code packages/xfs-core/src/generated"
+    "codegen:check": "tsx generators/ts-codegen.ts && tsx generators/cpp-codegen.ts && git diff --exit-code packages/xfs-core/src/generated native/zegen-xfs-sp/ZegenXFS_SP/include/generated"
   },
   "dependencies": {
     "@atm/shared": "workspace:*",
