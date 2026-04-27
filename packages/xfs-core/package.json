@@ -18,7 +18,7 @@
     "dev": "tsc -p tsconfig.json --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.ts\" --max-warnings 0",
-    "clean": "rimraf dist .turbo",
+    "clean": "rimraf dist .turbo tsconfig.tsbuildinfo",
     "test": "echo 'no tests yet' && exit 0"
   },
   "devDependencies": {
