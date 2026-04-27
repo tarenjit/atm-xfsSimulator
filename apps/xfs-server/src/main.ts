@@ -1,4 +1,12 @@
 import 'reflect-metadata';
+import * as path from 'node:path';
+import * as dotenv from 'dotenv';
+
+// Load .env from the monorepo root before any module reads process.env.
+// `nest start` runs with cwd = apps/xfs-server, so the workspace-root .env
+// is otherwise invisible to the zod env validator below.
+dotenv.config({ path: path.resolve(process.cwd(), '..', '..', '.env') });
+
 import { NestFactory } from '@nestjs/core';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import { ValidationPipe, VersioningType } from '@nestjs/common';

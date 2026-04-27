@@ -1,5 +1,9 @@
 import { Injectable, OnModuleDestroy, OnModuleInit, Logger } from '@nestjs/common';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
+
+type PrismaLogEntry =
+  | 'query' | 'info' | 'warn' | 'error'
+  | { emit: 'event' | 'stdout'; level: 'query' | 'info' | 'warn' | 'error' };
 
 /**
  * PrismaService is a long-lived singleton. We log every query in debug mode
@@ -15,7 +19,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         { emit: 'event', level: 'query' },
         { emit: 'event', level: 'warn' },
         { emit: 'event', level: 'error' },
-      ] as Prisma.LogDefinition[],
+      ] satisfies PrismaLogEntry[],
     });
 
     // Attach after super() so `this` is valid.

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { IsoResponseCode } from '@atm/iso8583';
 import { formatStan } from '@atm/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -151,7 +152,7 @@ export class HostEmulatorService {
     const stanNo = this.generateStan();
 
     try {
-      const result = await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const card = await tx.virtualCard.findUnique({
           where: { pan: params.pan },
           include: { account: true },
@@ -301,7 +302,7 @@ export class HostEmulatorService {
     reason: string;
   }): Promise<void> {
     this.logger.warn(`reversing STAN=${params.stanNo} reason=${params.reason}`);
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Same advisory lock as authorize — the reversal must not race against
       // a concurrent authorization on the same account.
       await tx.$executeRawUnsafe(

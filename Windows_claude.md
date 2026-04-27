@@ -5,6 +5,8 @@
 > **Last updated:** 2026-04-25 (Phase 8c.2 landed, commit `34f4a0b`).
 >
 > **Architecture target:** the simulator's **backend + UI run on Linux** (or a Linux VM next to the ghost); the **ZegenXFS.dll** is the *only* Windows artifact — it drops into the ghost ATM's XFS stack and forwards every `WFS*` call over TCP back to the backend.
+>
+> **⚠ ARCHITECTURE NOTE (added 2026-04-27):** This document describes the **TCP bridge architecture** (CLAUDE.md v2.0 plan). **Architecture_v3.md is now authoritative** and supersedes this approach: the C++ component should be a full in-VM Service Provider, not a TCP bridge. Code in `packages/xfs-dll/` will be migrated to `native/zegen-xfs-sp/` per Architecture_v3.md §16. Read this doc as historical context for what's built; read Architecture_v3.md for what to build next.
 
 ---
 

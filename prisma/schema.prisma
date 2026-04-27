@@ -6,7 +6,7 @@
 
 generator client {
   provider      = "prisma-client-js"
-  binaryTargets = ["native", "darwin-arm64", "linux-musl-openssl-3.0.x"]
+  binaryTargets = ["native", "windows", "darwin-arm64", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -210,10 +210,18 @@ model MacroRun {
   suiteRunId  String?
   suiteRun    MacroSuiteRun? @relation(fields: [suiteRunId], references: [id], onDelete: SetNull)
 
+  // Architecture_v3.md §11 — multi-VM execution. Null when run in native (in-browser) mode.
+  vmId        String?
+  vm          GhostVm?       @relation(fields: [vmId], references: [id], onDelete: SetNull)
+  groupId     String?
+  group       MacroRunGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
   @@index([macroId])
   @@index([status])
   @@index([startedAt])
   @@index([suiteRunId])
+  @@index([vmId])
+  @@index([groupId])
 }
 
 model MacroSuite {
@@ -241,6 +249,122 @@ model MacroSuiteRun {
   macroRuns   MacroRun[]
 
   @@index([suiteId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+// ============================================================================
+// Management-plane models (Architecture_v3.md §11) — multi-tenant + ghost-VM
+// fleet tracking. Required for v3 Phase 1 closure.
+// ============================================================================
+
+model Tenant {
+  id          String   @id @default(cuid())
+  name        String   @unique               // "Bank Mandiri", "Bank BSI"
+  status      String   @default("ACTIVE")    // ACTIVE, SUSPENDED, ARCHIVED
+  tier        String   @default("TIER_1")    // TIER_1, TIER_2, TIER_3 per v3 §15
+  contactInfo Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  vms         GhostVm[]
+  // users     User[]   — wire when NextAuth User model lands (post-Phase 1)
+
+  @@index([status])
+}
+
+// One ghost ATM VM registered with the management plane.
+// vmId is reported by the in-VM SP at HELLO; cuid id is server-side.
+model GhostVm {
+  id              String    @id @default(cuid())
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vmId            String    @unique           // SP-reported identifier
+  name            String                       // "Mandiri-Ghost-001", "BSI-Test-VM-A"
+  hostnameOrIp    String?
+  spVersion       String?
+  profileId       String?                      // active ATM profile (no FK yet — profile model lands later phase)
+  status          String    @default("OFFLINE") // ONLINE, OFFLINE, ERROR
+  lastSeenAt      DateTime?
+  middleware      String?                      // "Euronet MVS", "APTRA Edge"
+  middlewareVer   String?
+  bankAppName     String?
+  bankAppVersion  String?
+  registeredAt    DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  agentSessions   AgentSession[]
+  macroRuns       MacroRun[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([lastSeenAt])
+}
+
+// Each WebSocket connection from an in-VM SP is a session.
+model AgentSession {
+  id              String    @id @default(cuid())
+  vmId            String
+  vm              GhostVm   @relation(fields: [vmId], references: [id], onDelete: Cascade)
+  connectedAt     DateTime  @default(now())
+  disconnectedAt  DateTime?
+  spVersion       String
+  totalCommands   Int       @default(0)
+  totalEvents     Int       @default(0)
+  remoteAddress   String?
+
+  @@index([vmId])
+  @@index([connectedAt])
+}
+
+// Forwarded XFS command log from VMs. Distinct from XfsCommandLog (which is
+// the native-mode log produced inside xfs-server itself).
+model VmCommandLog {
+  id           String   @id @default(cuid())
+  vmId         String
+  sessionId    String?
+  hService     String
+  serviceClass String
+  commandCode  String
+  requestId    String
+  payload      Json
+  response     Json?
+  result       Int?
+  durationMs   Int?
+  occurredAt   DateTime              // wall-clock from inside the VM
+  receivedAt   DateTime @default(now())
+
+  @@index([vmId, occurredAt])
+  @@index([commandCode])
+}
+
+// Periodic health snapshots pushed by the in-VM agent.
+model VmHealthMetric {
+  id           String    @id @default(cuid())
+  vmId         String
+  cpuPercent   Float
+  memoryMb     Int
+  diskMb       Int
+  spUptimeSec  Int
+  lastXfsCmd   DateTime?
+  reportedAt   DateTime  @default(now())
+
+  @@index([vmId, reportedAt])
+}
+
+// Multi-VM macro orchestration: one macro fanned out across N VMs becomes
+// one MacroRunGroup with N child MacroRuns (one per VM).
+model MacroRunGroup {
+  id          String     @id @default(cuid())
+  name        String
+  macroId     String
+  vmIds       String[]   @default([])          // VMs this group runs against
+  status      String     @default("RUNNING")   // RUNNING, COMPLETED, FAILED
+  startedAt   DateTime   @default(now())
+  completedAt DateTime?
+  runs        MacroRun[]
+
+  @@index([macroId])
   @@index([status])
   @@index([startedAt])
 }
