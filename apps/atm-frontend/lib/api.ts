@@ -2,8 +2,14 @@
  * Tiny fetch wrapper for the backend REST API.
  * Centralises the base URL + JSON parsing so components don't repeat boilerplate.
  */
-const API_BASE =
+export const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+
+/** Build an absolute URL to the v1 REST surface — handy for things that
+ *  must use a real URL rather than fetch (window.open for PDFs, etc.). */
+export function apiUrl(path: string): string {
+  return `${API_BASE}/api/v1${path}`;
+}
 
 export interface ApiOptions extends RequestInit {
   /** Request timeout in ms (default 10s). */

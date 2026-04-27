@@ -8,6 +8,7 @@ import { ThemeSwitcher } from '@/components/operator/ThemeSwitcher';
 import { MacroStudio } from '@/components/operator/MacroStudio';
 import { SuitePanel } from '@/components/operator/SuitePanel';
 import { HostTransportPanel } from '@/components/operator/HostTransportPanel';
+import { ReportsPanel } from '@/components/operator/ReportsPanel';
 
 export default function OperatorPage() {
   return (
@@ -32,6 +33,8 @@ export default function OperatorPage() {
         <MacroStudio />
 
         <SuitePanel />
+
+        <ReportsPanel />
 
         <div className="grid lg:grid-cols-2 gap-8">
           <DeviceStatus />
