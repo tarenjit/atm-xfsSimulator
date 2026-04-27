@@ -116,11 +116,15 @@ describe('Iso20022HttpTransport', () => {
     expect(res.status).toBe(200);
     expect(res.body).toContain('<TxSts>ACSC</TxSts>');
     expect(res.body).toContain('<OrgnlEndToEndId>E2E-TEST-001</OrgnlEndToEndId>');
-    expect(host.authorizeWithdrawal).toHaveBeenCalledWith({
-      pan: '4580123456787234',
-      amount: 300000,
-      sessionId: 'pacs008-E2E-TEST-001',
-    });
+    expect(host.authorizeWithdrawal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pan: '4580123456787234',
+        amount: 300000,
+        sessionId: 'pacs008-E2E-TEST-001',
+        // Transport overrides PAN-based BIN routing with its configured BI-FAST profile.
+        switchProfile: expect.objectContaining({ id: 'BIFAST' }),
+      }),
+    );
   });
 
   it('POST /pacs.008 (declined) → pacs.002 with TxSts RJCT and reason code', async () => {

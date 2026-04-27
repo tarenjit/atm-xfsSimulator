@@ -17,12 +17,28 @@ import { ReceiptSlot } from './ReceiptSlot';
 const WITHDRAW_FDKS: FdkOption[] = [
   { slot: 'FDK_A', label: '300.000', value: 300_000, enabled: true },
   { slot: 'FDK_B', label: '500.000', value: 500_000, enabled: true },
-  { slot: 'FDK_C', label: 'UANG ELEKTRONIK', enabled: false },
+  { slot: 'FDK_C', label: 'UANG ELEKTRONIK', enabled: true },
   { slot: 'FDK_D', label: '', enabled: false },
   { slot: 'FDK_E', label: '1.000.000', value: 1_000_000, enabled: true },
   { slot: 'FDK_F', label: '2.000.000', value: 2_000_000, enabled: true },
   { slot: 'FDK_G', label: 'PENARIKAN\nJUMLAH LAIN', enabled: true },
-  { slot: 'FDK_H', label: 'MENU LAINNYA', enabled: false },
+  { slot: 'FDK_H', label: 'MENU LAINNYA', enabled: true },
+];
+
+/** Sub-menu reached via FDK_H "MENU LAINNYA". Layout matches typical Indonesian
+ *  bank ATMs: balance + transfer on the active side, payment + deposit stubs.
+ *  All clicks are handled client-side; balance dispatches to the existing
+ *  BALANCE flow. Transfer / Payment / Deposit show a "coming soon" overlay
+ *  for now (backend support is a future phase). */
+const SUB_MENU_FDKS: FdkOption[] = [
+  { slot: 'FDK_A', label: 'CEK SALDO', enabled: true },
+  { slot: 'FDK_B', label: 'TRANSFER', enabled: true },
+  { slot: 'FDK_C', label: 'SETOR TUNAI', enabled: true },
+  { slot: 'FDK_D', label: '', enabled: false },
+  { slot: 'FDK_E', label: 'PEMBAYARAN', enabled: true },
+  { slot: 'FDK_F', label: '', enabled: false },
+  { slot: 'FDK_G', label: '', enabled: false },
+  { slot: 'FDK_H', label: 'KEMBALI', enabled: true },
 ];
 
 export function AtmScreen() {
@@ -35,6 +51,12 @@ export function AtmScreen() {
   const [customAmount, setCustomAmount] = useState('');
   const [pinDigits, setPinDigits] = useState(0);
   const [pinBusy, setPinBusy] = useState(false);
+
+  // Client-side menu view ('MAIN' is the standard withdrawal menu;
+  // 'SUB' is the MENU LAINNYA sub-menu reached via FDK_H).
+  const [menuView, setMenuView] = useState<'MAIN' | 'SUB'>('MAIN');
+  // Modal overlay for "coming soon" + UANG ELEKTRONIK feedback. null = no overlay.
+  const [overlayMsg, setOverlayMsg] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -141,29 +163,86 @@ export function AtmScreen() {
 
   const selectFdk = async (fdk: FdkOption) => {
     if (!fdk.enabled) return;
-    if (state === 'MAIN_MENU') {
-      if (typeof fdk.value === 'number') {
-        // quick-amount withdrawal
-        await wrap(async () => {
-          await api('/sessions/select-transaction', {
-            method: 'POST',
-            body: JSON.stringify({ txnType: 'WITHDRAWAL' }),
-          });
-          await api('/sessions/submit-amount', {
-            method: 'POST',
-            body: JSON.stringify({ amount: fdk.value }),
-          });
-        });
-      } else if (fdk.label.includes('JUMLAH LAIN')) {
-        await wrap(() =>
-          api('/sessions/select-transaction', {
-            method: 'POST',
-            body: JSON.stringify({ txnType: 'WITHDRAWAL' }),
-          }),
-        );
+    if (state !== 'MAIN_MENU') return;
+
+    // SUB_MENU view (reached via "MENU LAINNYA"): Cek Saldo / Transfer /
+    // Pembayaran / Setor Tunai / Kembali.
+    if (menuView === 'SUB') {
+      switch (fdk.label) {
+        case 'CEK SALDO':
+          setMenuView('MAIN');
+          await wrap(() =>
+            api('/sessions/select-transaction', {
+              method: 'POST',
+              body: JSON.stringify({ txnType: 'BALANCE' }),
+            }),
+          );
+          return;
+        case 'TRANSFER':
+          setOverlayMsg(
+            'TRANSFER\n\nFitur ini sedang dalam pengembangan.\nSilakan gunakan layanan online banking Anda.',
+          );
+          return;
+        case 'PEMBAYARAN':
+          setOverlayMsg(
+            'PEMBAYARAN\n\nFitur ini sedang dalam pengembangan.\nDijadwalkan rilis dalam pembaruan berikutnya.',
+          );
+          return;
+        case 'SETOR TUNAI':
+          setOverlayMsg(
+            'SETOR TUNAI\n\nFitur ini sedang dalam pengembangan.\nSilakan gunakan ATM Setor Tarik (CRM) terdekat.',
+          );
+          return;
+        case 'KEMBALI':
+          setMenuView('MAIN');
+          return;
       }
+      return;
+    }
+
+    // MAIN view: standard withdrawal menu + the two new behaviours.
+    if (fdk.label === 'UANG ELEKTRONIK') {
+      setOverlayMsg(
+        'UANG ELEKTRONIK\n\nSilakan tempelkan kartu uang elektronik Anda\n(Mandiri e-Money / Flazz / Brizzi / TapCash)\n\nMaaf, fitur ini belum tersedia di simulator.',
+      );
+      return;
+    }
+    if (fdk.label === 'MENU LAINNYA') {
+      setMenuView('SUB');
+      return;
+    }
+    if (typeof fdk.value === 'number') {
+      // quick-amount withdrawal
+      await wrap(async () => {
+        await api('/sessions/select-transaction', {
+          method: 'POST',
+          body: JSON.stringify({ txnType: 'WITHDRAWAL' }),
+        });
+        await api('/sessions/submit-amount', {
+          method: 'POST',
+          body: JSON.stringify({ amount: fdk.value }),
+        });
+      });
+      return;
+    }
+    if (fdk.label.includes('JUMLAH LAIN')) {
+      await wrap(() =>
+        api('/sessions/select-transaction', {
+          method: 'POST',
+          body: JSON.stringify({ txnType: 'WITHDRAWAL' }),
+        }),
+      );
+      return;
     }
   };
+
+  // Reset client-side view + overlay when session ends or restarts.
+  useEffect(() => {
+    if (state === 'IDLE' || state === 'ENDED') {
+      setMenuView('MAIN');
+      setOverlayMsg(null);
+    }
+  }, [state]);
 
   const submitCustomAmount = async () => {
     const v = parseInt(customAmount, 10);
@@ -191,9 +270,11 @@ export function AtmScreen() {
       }),
     );
 
-  // Compute the FDK layout per current state.
+  // Compute the FDK layout per current state + current menu view.
   const fdks: FdkOption[] = useMemo(() => {
-    if (state === 'MAIN_MENU') return WITHDRAW_FDKS;
+    if (state === 'MAIN_MENU') {
+      return menuView === 'SUB' ? SUB_MENU_FDKS : WITHDRAW_FDKS;
+    }
     return [
       { slot: 'FDK_A', label: '', enabled: false },
       { slot: 'FDK_B', label: '', enabled: false },
@@ -204,7 +285,7 @@ export function AtmScreen() {
       { slot: 'FDK_G', label: '', enabled: false },
       { slot: 'FDK_H', label: '', enabled: false },
     ];
-  }, [state]);
+  }, [state, menuView]);
 
   const primary = theme?.primaryColor ?? '#0F172A';
   const accent = theme?.accentColor ?? '#FFFFFF';
@@ -241,6 +322,9 @@ export function AtmScreen() {
                 pinDigits={pinDigits}
                 customAmount={customAmount}
                 onCustomAmountChange={setCustomAmount}
+                menuView={menuView}
+                overlayMsg={overlayMsg}
+                onDismissOverlay={() => setOverlayMsg(null)}
               />
               <FdkColumn side="right" fdks={fdks.slice(4, 8)} onPress={selectFdk} />
             </div>

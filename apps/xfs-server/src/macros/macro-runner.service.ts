@@ -250,9 +250,66 @@ export class MacroRunnerService {
         await new Promise((r) => setTimeout(r, ms));
         return `waited ${ms}ms`;
       }
+      if (step.kind === 'ACTION' && step.operation === 'InjectError') {
+        return this.injectXfsError(params);
+      }
+      if (step.kind === 'ACTION' && step.operation === 'ClearError') {
+        return this.clearXfsError(params);
+      }
+      if (step.kind === 'CHECKPOINT' && step.operation.startsWith('Checkpoint(SessionState')) {
+        const expected = String(params.expected ?? '').toUpperCase();
+        // null session = the ATM has ended the prior session. Treat as ENDED
+        // so macros can assert "the decline path closed the session cleanly".
+        const sess = this.atm.getSession();
+        const actual = (sess?.state ?? 'ENDED').toUpperCase();
+        if (actual !== expected) {
+          throw new Error(`expected session state=${expected}, got ${actual}`);
+        }
+        return `state=${actual}`;
+      }
+      if (step.kind === 'CHECKPOINT' && step.operation.startsWith('Checkpoint(LastTransaction')) {
+        const expected = String(params.status ?? '').toUpperCase();
+        const tx = await this.prisma.transaction.findFirst({
+          orderBy: { createdAt: 'desc' },
+        });
+        if (!tx) throw new Error('no transactions found');
+        if (tx.status.toUpperCase() !== expected) {
+          throw new Error(`expected last txn status=${expected}, got ${tx.status} (reason: ${tx.errorReason ?? 'n/a'})`);
+        }
+        return `last txn=${tx.status} stan=${tx.stanNo ?? '-'}`;
+      }
     }
 
     throw new Error(`unsupported step: ${step.device}:${step.kind}:${step.operation}`);
+  }
+
+  /** Inject a one-shot XFS error on the named device (IDC/PIN/CDM/PTR).
+   *  The next call to that device's executeCommand returns the error and
+   *  clears the injection automatically. */
+  private injectXfsError(params: Record<string, unknown>): string {
+    const device = String(params.device ?? '').toUpperCase();
+    const code = Number(params.errorCode ?? -3);
+    const target = this.deviceFor(device);
+    target.injectError(code);
+    return `injected ${code} on ${device}`;
+  }
+
+  private clearXfsError(params: Record<string, unknown>): string {
+    const device = String(params.device ?? '').toUpperCase();
+    const target = this.deviceFor(device);
+    target.clearError();
+    return `cleared error on ${device}`;
+  }
+
+  private deviceFor(name: string): IdcDeviceService | PinDeviceService | CdmDeviceService | PtrDeviceService {
+    switch (name) {
+      case 'IDC': return this.idc;
+      case 'PIN': return this.pin;
+      case 'CDM': return this.cdm;
+      case 'PTR': return this.ptr;
+      default:
+        throw new Error(`unknown device for InjectError: ${name} (use IDC|PIN|CDM|PTR)`);
+    }
   }
 
   private resolveKey(raw: string, ctx: MacroRunContext): string {

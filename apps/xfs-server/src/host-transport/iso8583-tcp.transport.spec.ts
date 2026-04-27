@@ -108,11 +108,16 @@ describe('Iso8583TcpTransport', () => {
 
   it('handles MTI 0200 financial request and returns the host stan + authCode', async () => {
     const reply = await sendAndReceive(port, '0200|2=4580123456787234|4=300000|session=tcp-test');
-    expect(host.authorizeWithdrawal).toHaveBeenCalledWith({
-      pan: '4580123456787234',
-      amount: 300000,
-      sessionId: 'tcp-test',
-    });
+    expect(host.authorizeWithdrawal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pan: '4580123456787234',
+        amount: 300000,
+        sessionId: 'tcp-test',
+        // Transport passes its configured switchProfile so the JALIN
+        // listener wins over PAN-based BIN routing.
+        switchProfile: expect.objectContaining({ id: 'JALIN' }),
+      }),
+    );
     expect(reply).toContain('0210|39=00|stan=000123|auth=AUTH99|switch=JALIN');
   });
 

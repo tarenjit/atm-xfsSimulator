@@ -14,6 +14,12 @@ interface Props {
   pinDigits: number;
   customAmount: string;
   onCustomAmountChange: (v: string) => void;
+  /** Which MAIN_MENU view to render: 'MAIN' = withdrawals, 'SUB' = MENU LAINNYA. */
+  menuView?: 'MAIN' | 'SUB';
+  /** Modal overlay text. Newlines render as <br>. null = no overlay. */
+  overlayMsg?: string | null;
+  /** Called when user clicks anywhere outside the overlay or presses dismiss. */
+  onDismissOverlay?: () => void;
 }
 
 /**
@@ -21,7 +27,16 @@ interface Props {
  * Mandiri-style: bank logo top-right, Bahasa Indonesia copy by default,
  * FDK labels are owned by the parent and pointed at via arrows.
  */
-export function BankScreen({ primaryColor, accentColor, theme, session, pinDigits }: Props) {
+export function BankScreen({
+  primaryColor,
+  accentColor,
+  theme,
+  session,
+  pinDigits,
+  menuView = 'MAIN',
+  overlayMsg = null,
+  onDismissOverlay,
+}: Props) {
   const state = session?.state ?? 'IDLE';
 
   return (
@@ -66,7 +81,7 @@ export function BankScreen({ primaryColor, accentColor, theme, session, pinDigit
         </div>
       )}
 
-      {state === 'MAIN_MENU' && (
+      {state === 'MAIN_MENU' && menuView === 'MAIN' && (
         <div className="h-full flex flex-col">
           <div className="text-center font-semibold tracking-wider mb-1">MENU UTAMA</div>
           <div className="text-center text-xs opacity-85">
@@ -104,6 +119,44 @@ export function BankScreen({ primaryColor, accentColor, theme, session, pinDigit
               </div>
               <div className="flex items-center justify-end gap-2">
                 <span>MENU LAINNYA</span>
+                <span>◀</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {state === 'MAIN_MENU' && menuView === 'SUB' && (
+        <div className="h-full flex flex-col">
+          <div className="text-center font-semibold tracking-wider mb-1">MENU LAINNYA</div>
+          <div className="text-center text-xs opacity-70 mb-4">
+            PILIH LAYANAN ATAU TEKAN KEMBALI
+          </div>
+          <div className="flex-1 grid grid-cols-2 gap-x-10 gap-y-2 text-sm">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span>▶</span>
+                <span>CEK SALDO</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span>▶</span>
+                <span>TRANSFER</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span>▶</span>
+                <span>SETOR TUNAI</span>
+              </div>
+              <div />
+            </div>
+            <div className="space-y-2 text-right">
+              <div className="flex items-center justify-end gap-2">
+                <span>PEMBAYARAN</span>
+                <span>◀</span>
+              </div>
+              <div />
+              <div />
+              <div className="flex items-center justify-end gap-2">
+                <span>KEMBALI</span>
                 <span>◀</span>
               </div>
             </div>
@@ -168,6 +221,26 @@ export function BankScreen({ primaryColor, accentColor, theme, session, pinDigit
           <div className="text-lg">TERIMA KASIH</div>
           <div className="text-xs opacity-70 mt-2">Selamat jalan</div>
         </div>
+      )}
+
+      {/* Modal overlay (UANG ELEKTRONIK / coming-soon stubs) */}
+      {overlayMsg && (
+        <button
+          type="button"
+          aria-label="Dismiss overlay"
+          onClick={onDismissOverlay}
+          data-testid="bank-screen-overlay"
+          className="absolute inset-0 rounded-lg flex items-center justify-center cursor-pointer
+                     bg-black/70 backdrop-blur-sm transition-opacity"
+        >
+          <div className="max-w-md mx-6 px-6 py-5 rounded-xl bg-slate-900/95 border border-cyan-400/40
+                          text-center text-white whitespace-pre-line text-sm leading-relaxed shadow-2xl">
+            {overlayMsg}
+            <div className="mt-4 text-[11px] opacity-60 uppercase tracking-widest">
+              Tekan layar untuk menutup
+            </div>
+          </div>
+        </button>
       )}
 
       {/* Small watermark at bottom, matching reference */}

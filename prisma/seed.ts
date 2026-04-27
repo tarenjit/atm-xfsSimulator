@@ -435,6 +435,191 @@ async function main() {
     },
   });
 
+  // -------------------------------------------------------------------------
+  // Realistic test scenarios — positive + negative paths covering the most
+  // common failure modes Jalin's QA team needs to validate.
+  //
+  // Each macro uses ACTION/CHECKPOINT step kinds defined in
+  // packages/test-engine/.../macro.types.ts and handled by MacroRunnerService.
+  // -------------------------------------------------------------------------
+
+  // SCENARIO: Balance inquiry (happy path, no cash dispensed)
+  await prisma.macro.create({
+    data: {
+      name: 'Cek Saldo (balance inquiry)',
+      folder: 'Inquiries',
+      description:
+        'Insert HAPPY card 4580…7234, enter PIN 111111, select BALANCE. ' +
+        'Validates the no-dispense flow: PIN → host auth → balance shown → eject card.',
+      tags: ['balance', 'positive', 'smoke'],
+      steps: [
+        { id: 'b1', order: 1, kind: 'ACTION', device: 'Card', operation: 'Select',
+          parameters: [{ name: 'pan', type: 'string', value: '4580123456787234' }], enabled: true },
+        { id: 'b2', order: 2, kind: 'ACTION', device: 'Card', operation: 'Insert',
+          parameters: [], enabled: true },
+        { id: 'b3', order: 3, kind: 'ACTION', device: 'PinPad', operation: 'EnterPin',
+          parameters: [{ name: 'pin', type: 'variable', value: 'Card.pin' }], enabled: true },
+        { id: 'b4', order: 4, kind: 'ACTION', device: 'System', operation: 'SelectTransaction',
+          parameters: [{ name: 'txnType', type: 'string', value: 'BALANCE' }], enabled: true },
+      ] as unknown as object,
+      variables: {} as unknown as object,
+    },
+  });
+
+  // SCENARIO: Insufficient funds (LOW BAL card; expects DECLINED transaction)
+  await prisma.macro.create({
+    data: {
+      name: 'Insufficient funds (decline path)',
+      folder: 'Negative scenarios',
+      description:
+        'Insert LOW BAL card 4580…3333 (Rp 150k balance), attempt withdrawal of Rp 1.000.000. ' +
+        'Validates decline path: host returns code 51, no debit, customer sees error screen.',
+      tags: ['negative', 'withdrawal', 'insufficient-funds'],
+      steps: [
+        { id: 'i1', order: 1, kind: 'ACTION', device: 'Card', operation: 'Select',
+          parameters: [{ name: 'pan', type: 'string', value: '4580111122223333' }], enabled: true },
+        { id: 'i2', order: 2, kind: 'ACTION', device: 'Card', operation: 'Insert',
+          parameters: [], enabled: true },
+        { id: 'i3', order: 3, kind: 'ACTION', device: 'PinPad', operation: 'EnterPin',
+          parameters: [{ name: 'pin', type: 'variable', value: 'Card.pin' }], enabled: true },
+        { id: 'i4', order: 4, kind: 'ACTION', device: 'System', operation: 'SelectTransaction',
+          parameters: [{ name: 'txnType', type: 'string', value: 'WITHDRAWAL' }], enabled: true },
+        { id: 'i5', order: 5, kind: 'ACTION', device: 'System', operation: 'SubmitAmount',
+          parameters: [{ name: 'amount', type: 'number', value: 1_000_000 }], enabled: true },
+        { id: 'i6', order: 6, kind: 'ACTION', device: 'System', operation: 'Confirm',
+          parameters: [], enabled: true },
+        // Wait for the host-emulator decline to land + session to end.
+        { id: 'i7', order: 7, kind: 'WAIT',
+          parameters: [{ name: 'ms', type: 'number', value: 1000 }], enabled: true,
+          device: 'System', operation: 'Wait' },
+        // Session must have ended (declined) — not in any active flow state.
+        { id: 'i8', order: 8, kind: 'CHECKPOINT', device: 'System',
+          operation: 'Checkpoint(SessionState)',
+          parameters: [{ name: 'expected', type: 'string', value: 'ENDED' }], enabled: true },
+      ] as unknown as object,
+      variables: {} as unknown as object,
+    },
+  });
+
+  // SCENARIO: CDM dispense error → host reversal (XFS error injection)
+  await prisma.macro.create({
+    data: {
+      name: 'CDM dispense fault → host reversal',
+      folder: 'Negative scenarios',
+      description:
+        'Inject a one-shot CDM hardware error then drive a withdrawal. The host approves, the ' +
+        'CDM throws on dispense, and the host emulator reverses. The transaction must end as ' +
+        'REVERSED with the customer not debited. Critical Jalin acceptance test.',
+      tags: ['negative', 'cdm-error', 'reversal', 'critical'],
+      steps: [
+        { id: 'c1', order: 1, kind: 'ACTION', device: 'Card', operation: 'Select',
+          parameters: [{ name: 'pan', type: 'string', value: '4580123456787234' }], enabled: true },
+        { id: 'c2', order: 2, kind: 'ACTION', device: 'Card', operation: 'Insert',
+          parameters: [], enabled: true },
+        { id: 'c3', order: 3, kind: 'ACTION', device: 'PinPad', operation: 'EnterPin',
+          parameters: [{ name: 'pin', type: 'variable', value: 'Card.pin' }], enabled: true },
+        { id: 'c4', order: 4, kind: 'ACTION', device: 'System', operation: 'SelectTransaction',
+          parameters: [{ name: 'txnType', type: 'string', value: 'WITHDRAWAL' }], enabled: true },
+        { id: 'c5', order: 5, kind: 'ACTION', device: 'System', operation: 'SubmitAmount',
+          parameters: [{ name: 'amount', type: 'number', value: 200_000 }], enabled: true },
+        // Inject CDM error before the dispense fires.
+        { id: 'c6', order: 6, kind: 'ACTION', device: 'System', operation: 'InjectError',
+          parameters: [
+            { name: 'device', type: 'string', value: 'CDM' },
+            { name: 'errorCode', type: 'number', value: -3 }, // ERR_HARDWARE_ERROR
+          ], enabled: true },
+        { id: 'c7', order: 7, kind: 'ACTION', device: 'System', operation: 'Confirm',
+          parameters: [], enabled: true },
+        // Wait for the reversal to land.
+        { id: 'c8', order: 8, kind: 'WAIT',
+          parameters: [{ name: 'ms', type: 'number', value: 1500 }], enabled: true,
+          device: 'System', operation: 'Wait' },
+        { id: 'c9', order: 9, kind: 'CHECKPOINT', device: 'System',
+          operation: 'Checkpoint(LastTransaction)',
+          parameters: [{ name: 'status', type: 'string', value: 'REVERSED' }], enabled: true },
+      ] as unknown as object,
+      variables: {} as unknown as object,
+    },
+  });
+
+  // SCENARIO: Blocked card rejected at authentication
+  await prisma.macro.create({
+    data: {
+      name: 'Blocked card rejected',
+      folder: 'Negative scenarios',
+      description:
+        'Insert BLOCKED card 4580…1111. Authentication must fail with response code 62 (CARD_BLOCKED) ' +
+        'before PIN is even prompted. Card is not retained — just rejected.',
+      tags: ['negative', 'blocked-card', 'auth'],
+      steps: [
+        { id: 'k1', order: 1, kind: 'ACTION', device: 'Card', operation: 'Select',
+          parameters: [{ name: 'pan', type: 'string', value: '4580555500001111' }], enabled: true },
+        { id: 'k2', order: 2, kind: 'ACTION', device: 'Card', operation: 'Insert',
+          parameters: [], enabled: true },
+        // Session should end / error out without progressing to PIN_ENTRY.
+        // Wait briefly so the auth roundtrip completes.
+        { id: 'k3', order: 3, kind: 'WAIT',
+          parameters: [{ name: 'ms', type: 'number', value: 800 }], enabled: true,
+          device: 'System', operation: 'Wait' },
+      ] as unknown as object,
+      variables: {} as unknown as object,
+    },
+  });
+
+  // SCENARIO: Expired card rejected at authentication
+  await prisma.macro.create({
+    data: {
+      name: 'Expired card rejected',
+      folder: 'Negative scenarios',
+      description:
+        'Insert EXPIRED card 4580…2222 (expiry 2001). Authentication must fail with response ' +
+        'code 54 (EXPIRED_CARD).',
+      tags: ['negative', 'expired-card', 'auth'],
+      steps: [
+        { id: 'e1', order: 1, kind: 'ACTION', device: 'Card', operation: 'Select',
+          parameters: [{ name: 'pan', type: 'string', value: '4580444433332222' }], enabled: true },
+        { id: 'e2', order: 2, kind: 'ACTION', device: 'Card', operation: 'Insert',
+          parameters: [], enabled: true },
+        { id: 'e3', order: 3, kind: 'WAIT',
+          parameters: [{ name: 'ms', type: 'number', value: 800 }], enabled: true,
+          device: 'System', operation: 'Wait' },
+      ] as unknown as object,
+      variables: {} as unknown as object,
+    },
+  });
+
+  // SCENARIO: Maximum-allowed withdrawal (Rp 2,000,000 — within Jalin per-tx cap)
+  await prisma.macro.create({
+    data: {
+      name: 'Maximum withdrawal (2,000,000)',
+      folder: 'Withdrawals',
+      description:
+        'Withdraw Rp 2.000.000 from HAPPY card. Verifies the largest preset amount works ' +
+        'end-to-end (within Jalin per-transaction cap of Rp 5.000.000 and account balance).',
+      tags: ['positive', 'withdrawal', 'limit'],
+      steps: [
+        { id: 'm1', order: 1, kind: 'ACTION', device: 'Card', operation: 'Select',
+          parameters: [{ name: 'pan', type: 'string', value: '4580123456787234' }], enabled: true },
+        { id: 'm2', order: 2, kind: 'ACTION', device: 'Card', operation: 'Insert',
+          parameters: [], enabled: true },
+        { id: 'm3', order: 3, kind: 'ACTION', device: 'PinPad', operation: 'EnterPin',
+          parameters: [{ name: 'pin', type: 'variable', value: 'Card.pin' }], enabled: true },
+        { id: 'm4', order: 4, kind: 'ACTION', device: 'System', operation: 'SelectTransaction',
+          parameters: [{ name: 'txnType', type: 'string', value: 'WITHDRAWAL' }], enabled: true },
+        { id: 'm5', order: 5, kind: 'ACTION', device: 'System', operation: 'SubmitAmount',
+          parameters: [{ name: 'amount', type: 'number', value: 2_000_000 }], enabled: true },
+        { id: 'm6', order: 6, kind: 'ACTION', device: 'System', operation: 'Confirm',
+          parameters: [], enabled: true },
+        { id: 'm7', order: 7, kind: 'CHECKPOINT', device: 'Receipt',
+          operation: 'Checkpoint(Printed)', parameters: [], enabled: true },
+        { id: 'm8', order: 8, kind: 'CHECKPOINT', device: 'System',
+          operation: 'Checkpoint(LastTransaction)',
+          parameters: [{ name: 'status', type: 'string', value: 'COMPLETED' }], enabled: true },
+      ] as unknown as object,
+      variables: {} as unknown as object,
+    },
+  });
+
   // eslint-disable-next-line no-console
   console.log('[seed] Seed complete:');
   // eslint-disable-next-line no-console
@@ -445,7 +630,7 @@ async function main() {
   console.log(`  - 7 bank themes (mandiri default)`);
   console.log(`  - 3 ATM hardware profiles (hyosung default)`);
   // eslint-disable-next-line no-console
-  console.log(`  - 1 demo macro (Happy-path withdrawal 300,000)`);
+  console.log(`  - 7 macros (2 happy + 4 negative + 1 max-amount)`);
 }
 
 main()
