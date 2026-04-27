@@ -26,6 +26,7 @@ async function main() {
   await prisma.account.deleteMany();
   await prisma.cashUnit.deleteMany();
   await prisma.bankTheme.deleteMany();
+  await prisma.atmProfile.deleteMany();
   await prisma.macroRun.deleteMany();
   await prisma.macro.deleteMany();
 
@@ -216,6 +217,120 @@ async function main() {
     ],
   });
 
+  // --- ATM hardware profiles (Update_features.md §7, Architecture_v3.md §10 P4) ---
+  // Three vendors: Hyosung (default — matches reference deployment), NCR
+  // Personas (BCA/Mandiri NCR fleets), Diebold Opteva (BRI/BNI DN fleets).
+  await prisma.atmProfile.createMany({
+    data: [
+      {
+        code: 'hyosung-standard',
+        name: 'Hyosung Standard ATM',
+        vendor: 'HYOSUNG',
+        isDefault: true,
+        config: {
+          idc: {
+            readerType: 'MOTOR',
+            emvLevel2: true,
+            contactless: true,
+            chipProtocols: ['T0', 'T1', 'EMV'],
+          },
+          pin: {
+            type: 'EPP',
+            fdkCount: 8,
+            keyLayout: 'HYOSUNG',
+            supportedPinFormats: ['ISO0', 'ISO1', 'ISO3'],
+          },
+          cdm: {
+            cassetteCount: 4,
+            cassettes: [
+              { unitId: 'CASS1', denomination: 100000, capacity: 2500 },
+              { unitId: 'CASS2', denomination: 50000, capacity: 2500 },
+              { unitId: 'CASS3', denomination: 20000, capacity: 2500 },
+              { unitId: 'REJECT', denomination: 0, capacity: 300 },
+            ],
+            maxDispensePerTxn: 5_000_000,
+            shutterBehavior: 'AUTO',
+          },
+          ptr: { type: 'THERMAL', width: 80, canCut: true, hasJournal: true },
+          siu: {
+            sensors: ['CABINET_DOOR', 'SAFE_DOOR', 'TAMPER'],
+            indicators: ['POWER', 'READY', 'FAULT', 'SERVICE'],
+          },
+        },
+      },
+      {
+        code: 'ncr-personas-86',
+        name: 'NCR Personas 86',
+        vendor: 'NCR',
+        config: {
+          idc: {
+            readerType: 'MOTOR',
+            emvLevel2: true,
+            contactless: false,
+            chipProtocols: ['T0', 'T1', 'EMV'],
+          },
+          pin: {
+            type: 'EPP',
+            fdkCount: 8,
+            keyLayout: 'NCR',
+            supportedPinFormats: ['ISO0', 'ISO1', 'ISO3', 'ANSI'],
+          },
+          cdm: {
+            cassetteCount: 4,
+            cassettes: [
+              { unitId: 'CASS1', denomination: 100000, capacity: 3000 },
+              { unitId: 'CASS2', denomination: 50000, capacity: 3000 },
+              { unitId: 'CASS3', denomination: 20000, capacity: 3000 },
+              { unitId: 'REJECT', denomination: 0, capacity: 400 },
+            ],
+            maxDispensePerTxn: 5_000_000,
+            shutterBehavior: 'AUTO',
+          },
+          ptr: { type: 'THERMAL', width: 80, canCut: true, hasJournal: true },
+          siu: {
+            sensors: ['CABINET_DOOR', 'SAFE_DOOR', 'TAMPER', 'OPERATOR_SWITCH'],
+            indicators: ['POWER', 'READY', 'FAULT', 'SERVICE'],
+          },
+        },
+      },
+      {
+        code: 'diebold-opteva-520',
+        name: 'Diebold Opteva 520',
+        vendor: 'DIEBOLD_NIXDORF',
+        config: {
+          idc: {
+            readerType: 'DIP',
+            emvLevel2: true,
+            contactless: true,
+            chipProtocols: ['T0', 'T1', 'EMV'],
+          },
+          pin: {
+            type: 'EPP',
+            fdkCount: 8,
+            keyLayout: 'DIEBOLD',
+            supportedPinFormats: ['ISO0', 'ISO3'],
+          },
+          cdm: {
+            cassetteCount: 4,
+            cassettes: [
+              { unitId: 'CASS1', denomination: 100000, capacity: 2200 },
+              { unitId: 'CASS2', denomination: 50000, capacity: 2200 },
+              { unitId: 'CASS3', denomination: 20000, capacity: 2200 },
+              { unitId: 'REJECT', denomination: 0, capacity: 250 },
+            ],
+            maxDispensePerTxn: 5_000_000,
+            shutterBehavior: 'AUTO',
+          },
+          ptr: { type: 'THERMAL', width: 80, canCut: true, hasJournal: true },
+          siu: {
+            sensors: ['CABINET_DOOR', 'SAFE_DOOR', 'TAMPER'],
+            indicators: ['POWER', 'READY', 'FAULT', 'SERVICE'],
+          },
+        },
+      },
+    ],
+  });
+
   // --- Demo macro (Update_features.md §4.1 reference flow) ---
   await prisma.macro.create({
     data: {
@@ -328,6 +443,7 @@ async function main() {
   console.log(`  - 4 cash units (CASS1=100k, CASS2=50k, CASS3=20k, REJECT)`);
   // eslint-disable-next-line no-console
   console.log(`  - 7 bank themes (mandiri default)`);
+  console.log(`  - 3 ATM hardware profiles (hyosung default)`);
   // eslint-disable-next-line no-console
   console.log(`  - 1 demo macro (Happy-path withdrawal 300,000)`);
 }
