@@ -16,6 +16,7 @@ import { ThemesModule } from './themes/themes.module';
 import { MacrosModule } from './macros/macros.module';
 import { SuitesModule } from './suites/suites.module';
 import { BridgeModule } from './bridge/bridge.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { BridgeModule } from './bridge/bridge.module';
     MacrosModule,
     SuitesModule,
     BridgeModule,
+    ReportsModule,
   ],
 })
 export class AppModule {}
