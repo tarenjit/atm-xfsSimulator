@@ -158,6 +158,31 @@ model AtmSession {
 }
 
 // ----------------------------------------------------------------------------
+// Host transport config (Phase 7.1)
+// One row per configured wire-protocol listener. `enabled = true` means the
+// listener is active. Operator can hot-swap between in-process / ISO 8583 TCP /
+// ISO 20022 XML and pick the active switch profile (Jalin/ATMB/Prima/BI-FAST).
+// ----------------------------------------------------------------------------
+
+model HostTransportConfig {
+  id            String   @id @default(cuid())
+  name          String   @unique          // "Jalin TCP", "BI-FAST XML", "In-Process default"
+  kind          String                    // IN_PROCESS | ISO8583_TCP | ISO20022_HTTP
+  bindAddress   String   @default("127.0.0.1")
+  port          Int                        // 0 for IN_PROCESS
+  switchProfile String   @default("JALIN") // matches IsoSwitchId
+  tlsEnabled    Boolean  @default(false)
+  enabled       Boolean  @default(false)   // listener started?
+  isPrimary     Boolean  @default(false)   // marked default in operator UI
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([kind])
+  @@index([enabled])
+}
+
+// ----------------------------------------------------------------------------
 // ATM hardware profile (Update_features.md §7, Architecture_v3.md §10 Phase 4)
 // Distinct from BankTheme: this is the *physical ATM model* (Hyosung, NCR,
 // Diebold). Theme = bank branding overlay; Profile = hardware capabilities.

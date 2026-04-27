@@ -7,6 +7,7 @@ import { SessionHistory } from '@/components/operator/SessionHistory';
 import { ThemeSwitcher } from '@/components/operator/ThemeSwitcher';
 import { MacroStudio } from '@/components/operator/MacroStudio';
 import { SuitePanel } from '@/components/operator/SuitePanel';
+import { HostTransportPanel } from '@/components/operator/HostTransportPanel';
 
 export default function OperatorPage() {
   return (
@@ -25,6 +26,8 @@ export default function OperatorPage() {
         </header>
 
         <ThemeSwitcher />
+
+        <HostTransportPanel />
 
         <MacroStudio />
 

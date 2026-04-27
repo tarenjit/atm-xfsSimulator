@@ -17,6 +17,7 @@ import { MacrosModule } from './macros/macros.module';
 import { SuitesModule } from './suites/suites.module';
 import { BridgeModule } from './bridge/bridge.module';
 import { ReportsModule } from './reports/reports.module';
+import { HostTransportModule } from './host-transport/host-transport.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { ReportsModule } from './reports/reports.module';
     SuitesModule,
     BridgeModule,
     ReportsModule,
+    HostTransportModule,
   ],
 })
 export class AppModule {}
