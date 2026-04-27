@@ -18,7 +18,7 @@
     "dev": "tsc -p tsconfig.json --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.ts\" --max-warnings 0",
-    "clean": "rm -rf dist .turbo coverage",
+    "clean": "rimraf dist .turbo coverage",
     "test": "jest --passWithNoTests",
     "test:cov": "jest --coverage --passWithNoTests"
   },
