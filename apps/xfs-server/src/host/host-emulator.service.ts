@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { IsoResponseCode } from '@atm/iso8583';
+import {
+  IsoResponseCode,
+  IsoSwitchProfile,
+  getSwitchByPan,
+} from '@atm/iso8583';
 import { formatStan } from '@atm/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -31,6 +35,9 @@ export interface AuthorizationResult {
   stanNo: string;
   balanceAfter?: number;
   reason?: string;
+  /** Indonesian switch that routed this authorisation (Jalin/ATMB/Prima/BI-FAST). */
+  switchId?: string;
+  switchName?: string;
 }
 
 export interface BalanceResult {
@@ -148,8 +155,17 @@ export class HostEmulatorService {
     pan: string;
     amount: number;
     sessionId: string;
+    /** Override the auto-routed switch (test/operator console). */
+    switchProfile?: IsoSwitchProfile;
   }): Promise<AuthorizationResult> {
     const stanNo = this.generateStan();
+    const sw = params.switchProfile ?? getSwitchByPan(params.pan);
+    const tag = (extra: Partial<AuthorizationResult>): AuthorizationResult => ({
+      stanNo,
+      switchId: sw.id,
+      switchName: sw.name,
+      ...extra,
+    } as AuthorizationResult);
 
     try {
       const result = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -159,12 +175,23 @@ export class HostEmulatorService {
         });
 
         if (!card?.account) {
-          return {
+          return tag({
             approved: false,
             responseCode: IsoResponseCode.INVALID_CARD,
-            stanNo,
             reason: 'card not found',
-          };
+          });
+        }
+
+        // Per-switch single-withdrawal ceiling. Architecture_v3.md §3 calls out
+        // that switches enforce different limits (BI-FAST allows much higher
+        // amounts than legacy switches like Jalin/ATMB). This check happens
+        // BEFORE the advisory lock so a too-large request fails fast.
+        if (params.amount > sw.maxWithdrawalIdr) {
+          return tag({
+            approved: false,
+            responseCode: IsoResponseCode.EXCEEDS_WITHDRAWAL_LIMIT,
+            reason: `${sw.name} per-transaction cap (${sw.maxWithdrawalIdr}) exceeded`,
+          });
         }
 
         // Serialize concurrent authorizations against the same account via a
@@ -180,22 +207,20 @@ export class HostEmulatorService {
         // transaction that just committed.
         const locked = await tx.account.findUnique({ where: { id: card.accountId } });
         if (!locked) {
-          return {
+          return tag({
             approved: false,
             responseCode: IsoResponseCode.NO_CARD_RECORD,
-            stanNo,
             reason: 'account not found',
-          };
+          });
         }
 
         const balance = Number(locked.balance);
         if (balance < params.amount) {
-          return {
+          return tag({
             approved: false,
             responseCode: IsoResponseCode.NOT_SUFFICIENT_FUNDS,
-            stanNo,
             reason: 'insufficient funds',
-          };
+          });
         }
 
         // Recompute daily withdrawn from transactions table — authoritative.
@@ -215,12 +240,11 @@ export class HostEmulatorService {
         const dailyLimit = Number(card.account.dailyLimit);
 
         if (alreadyWithdrawn + params.amount > dailyLimit) {
-          return {
+          return tag({
             approved: false,
             responseCode: IsoResponseCode.EXCEEDS_WITHDRAWAL_LIMIT,
-            stanNo,
             reason: `daily limit (${dailyLimit}) exceeded; already withdrawn ${alreadyWithdrawn}`,
-          };
+          });
         }
 
         // Approve + deduct atomically.
@@ -249,24 +273,22 @@ export class HostEmulatorService {
           },
         });
 
-        return {
+        return tag({
           approved: true,
           responseCode: IsoResponseCode.APPROVED,
           authCode,
-          stanNo,
           balanceAfter: Number(updated.balance),
-        };
+        });
       });
 
       return result;
     } catch (err) {
       this.logger.error(`authorizeWithdrawal failed: ${String(err)}`);
-      return {
+      return tag({
         approved: false,
         responseCode: IsoResponseCode.SYSTEM_MALFUNCTION,
-        stanNo,
         reason: 'host error',
-      };
+      });
     }
   }
 

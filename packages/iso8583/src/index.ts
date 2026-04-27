@@ -9,6 +9,7 @@
 export * from './fields';
 export * from './bitmap';
 export * from './codec';
+export * from './switches';
 
 export enum IsoMti {
   AUTH_REQUEST = '0100',
