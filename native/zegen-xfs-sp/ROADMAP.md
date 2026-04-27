@@ -156,6 +156,13 @@ Server-side (TS work, lives in `apps/xfs-server/`):
 
 ## Phase 13 — Customer integration & first PoC (1 week)
 
+**First PoC customer (confirmed)**: **Jalin Pembayaran Indonesia** running
+**Euronet MVS** in member-bank ghost ATM VMs. See
+[`docs/integrations/jalin-euronet-poc.md`](../../docs/integrations/jalin-euronet-poc.md)
+for the full integration playbook (pre-engagement checklist, install sequence,
+rollback recipe, 9-point acceptance criteria, known unknowns to clarify with
+the Euronet integration engineer).
+
 Work items:
 - [ ] `installer/ZegenXFS.wxs` — WiX MSI:
   - Deploys DLL to `C:\Program Files\Zegen\ATMirror\`
@@ -165,11 +172,20 @@ Work items:
   - Installs ZegenXFS_Agent as a Windows service
   - Clean uninstall restores the registry backup
 - [ ] `installer/post-install.ps1` — restart XFS service, validate connection.
-- [ ] `docs/integration-playbook.md` — step-by-step ghost-VM rollout with rollback.
-- [ ] First PoC engagement: smaller / friendlier bank (Bank DKI, Bank Jatim, or regional development bank). Validate against their actual middleware (most likely Euronet MVS).
+- [ ] **Jalin-specific deliverables** (per `docs/integrations/jalin-euronet-poc.md`):
+  - Confirmed Euronet MVS major.minor on Jalin's ghost VM
+  - Jalin-specific bank theme + receipt template (Bahasa Indonesia, including statutory wording)
+  - Hardware profile matching the cloned-from-real-ATM ghost (Hyosung / NCR / DN — confirm with Jalin ops)
+  - HSM key-management config alignment (TPK / TMK rotation cadence + ISO0/1/3 selection)
+  - Indonesian network policy timeouts (per-tx + retry) match Jalin switch's expectations
+  - 9-point acceptance test suite from the playbook §6, all green on the ghost
+- [ ] Verify [`docs/device-error-matrix.md`](../../docs/device-error-matrix.md) "ATM app response" column against actual Euronet MVS behaviour during walk-through with Jalin's QA engineer.
 - [ ] Hardening cycle from real-world feedback.
 
-**Exit criteria**: PoC bank successfully runs a regression suite (≥10 macros) against their ghost VM with our SP and the results land in our management plane.
+**Exit criteria**: Jalin's ghost VM runs the 9-point acceptance suite from
+[`docs/integrations/jalin-euronet-poc.md`](../../docs/integrations/jalin-euronet-poc.md) §6
+end-to-end through Euronet MVS, and the QA team can record + replay sessions
+from our management plane.
 
 ---
 
@@ -210,10 +226,10 @@ Work items:
 
 Per [Architecture_v3.md §17](../../docs/Architecture_v3.md):
 
-1. **Vendor middleware target list** — which middleware does the first PoC use? Build SP against that one first (don't try to support 5 before 1 works).
+1. **Vendor middleware target list** — ✅ **RESOLVED**: Euronet MVS first (Jalin's chosen middleware). All Phase 9-11 device porting prioritises calls Euronet MVS makes. Other vendors (NCR APTRA, Diebold ProTopas, Hyosung MoniPlus) come after Jalin signs off.
 2. **Code signing certificate** — order EV cert NOW (4-6 weeks lead). Required before any production deployment.
 3. **C++ developer staffing** — at least one senior Windows C++ dev for Phases 8b-14. If not in-house, engage a consultancy. Budget IDR 30-50M/month for a good senior.
 4. **CEN/XFS SDK** — download from CEN-CENELEC and verify headers compile against `dllmain.cpp` shadow types. Target: end of Phase 8a.
-5. **First PoC customer** — identify by Phase 6 latest. Smaller bank with appetite for innovation > tier-1 bank with bureaucracy.
+5. **First PoC customer** — ✅ **RESOLVED**: Jalin Pembayaran Indonesia + Euronet MVS. See `docs/integrations/jalin-euronet-poc.md` for the full pre-engagement checklist + acceptance criteria.
 6. **License model for Tier 1 vs Tier 2 upsell** — affects database design (per-VM pricing requires VM-level metering on GhostVm).
 7. **On-premise vs cloud deployment for first customer** — affects DevOps + update mechanism design.
