@@ -1,28 +1,19 @@
-/** IDC (Identification Card / card reader) command and event contracts. */
+/** IDC (Identification Card / card reader) command and event contracts.
+ *
+ * Command + event constants are spec-driven (Architecture_v3.md §4.4) — they
+ * come from spec/xfs-contract.yaml via the generator. Payload-shape
+ * interfaces below are still hand-written; payload codegen lands in Phase 8
+ * alongside C++ codegen.
+ */
 
-export const IDC_CMD = {
-  READ_RAW_DATA: 'WFS_CMD_IDC_READ_RAW_DATA',
-  READ_TRACK: 'WFS_CMD_IDC_READ_TRACK',
-  WRITE_TRACK: 'WFS_CMD_IDC_WRITE_TRACK',
-  EJECT_CARD: 'WFS_CMD_IDC_EJECT_CARD',
-  RETAIN_CARD: 'WFS_CMD_IDC_RETAIN_CARD',
-  RESET_COUNT: 'WFS_CMD_IDC_RESET_COUNT',
-  RESET: 'WFS_CMD_IDC_RESET',
-  CHIP_IO: 'WFS_CMD_IDC_CHIP_IO',
-  CHIP_POWER: 'WFS_CMD_IDC_CHIP_POWER',
-} as const;
-
-export type IdcCommandCode = (typeof IDC_CMD)[keyof typeof IDC_CMD];
-
-export const IDC_EVT = {
-  MEDIA_INSERTED: 'WFS_SRVE_IDC_MEDIAINSERTED',
-  MEDIA_REMOVED: 'WFS_SRVE_IDC_MEDIAREMOVED',
-  MEDIA_RETAINED: 'WFS_SRVE_IDC_MEDIARETAINED',
-  INVALID_TRACK_DATA: 'WFS_EXEE_IDC_INVALIDTRACKDATA',
-  INVALID_MEDIA: 'WFS_EXEE_IDC_INVALIDMEDIA',
-} as const;
-
-export type IdcEventCode = (typeof IDC_EVT)[keyof typeof IDC_EVT];
+export {
+  IDC_CMD,
+  IDC_EVT,
+  IDC_EVT_CLASS,
+  IDC_HSERVICE_DEFAULT,
+  type IdcCommandCode,
+  type IdcEventCode,
+} from './generated/idc';
 
 export type IdcTrackNumber = 1 | 2 | 3;
 

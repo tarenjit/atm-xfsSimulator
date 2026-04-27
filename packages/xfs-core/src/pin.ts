@@ -1,23 +1,18 @@
-/** PIN Pad / Encrypting PIN Pad command and event contracts. */
+/** PIN Pad / Encrypting PIN Pad command and event contracts.
+ *
+ * Command + event constants are spec-driven (Architecture_v3.md §4.4) — they
+ * come from spec/xfs-contract.yaml via the generator. Payload-shape
+ * interfaces and FDK constants below are hand-written.
+ */
 
-export const PIN_CMD = {
-  GET_PIN: 'WFS_CMD_PIN_GET_PIN',
-  GET_PINBLOCK: 'WFS_CMD_PIN_GET_PINBLOCK',
-  GET_DATA: 'WFS_CMD_PIN_GET_DATA',
-  RESET: 'WFS_CMD_PIN_RESET',
-  IMPORT_KEY: 'WFS_CMD_PIN_IMPORT_KEY',
-  GET_KEY_DETAIL: 'WFS_CMD_PIN_GET_KEY_DETAIL',
-} as const;
-
-export type PinCommandCode = (typeof PIN_CMD)[keyof typeof PIN_CMD];
-
-export const PIN_EVT = {
-  KEY: 'WFS_EXEE_PIN_KEY',
-  ENTER_DATA: 'WFS_EXEE_PIN_ENTERDATA',
-  DATA_READY: 'WFS_EXEE_PIN_DATAREADY',
-} as const;
-
-export type PinEventCode = (typeof PIN_EVT)[keyof typeof PIN_EVT];
+export {
+  PIN_CMD,
+  PIN_EVT,
+  PIN_EVT_CLASS,
+  PIN_HSERVICE_DEFAULT,
+  type PinCommandCode,
+  type PinEventCode,
+} from './generated/pin';
 
 /**
  * FDK (Function Descriptor Key) codes per CEN/XFS.

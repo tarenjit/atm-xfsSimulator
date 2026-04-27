@@ -1,0 +1,194 @@
+# =============================================================================
+# spec/xfs-contract.yaml
+# =============================================================================
+# ATMirror XFS contract — single source of truth for the TypeScript virtual
+# devices and the C++ Service Provider. CI verifies that generated TS files
+# under packages/xfs-core/src/generated/ are byte-identical to what the
+# generator produces from this file. C++ codegen is stubbed in Phase 2 and
+# wired in Phase 8.
+#
+# Authoritative reference: docs/Architecture_v3.md §4.4 (spec-driven sync).
+# Aligns with CEN/XFS 3.30 subset used by Indonesian banking middleware
+# (Euronet MVS, NCR APTRA, Diebold ProTopas, Hyosung MoniPlus).
+# =============================================================================
+
+version: "3.30"
+description: ATMirror XFS contract — single source of truth for TS + C++ codegen
+generated:
+  preamble: |
+    // GENERATED FILE — DO NOT EDIT.
+    // Source: spec/xfs-contract.yaml
+    // Regenerate via: pnpm codegen
+    // CI fails if this file is out of date with the spec.
+
+# -----------------------------------------------------------------------------
+# WOSA / XFS result codes. Negative = error. Names line up with XfsResult enum
+# in packages/xfs-core/src/types.ts.
+# -----------------------------------------------------------------------------
+resultCodes:
+  SUCCESS:                 0
+  ERR_CANCEL:             -1
+  ERR_DEV_NOT_READY:      -2
+  ERR_HARDWARE_ERROR:     -3
+  ERR_INVALID_HSERVICE:   -4
+  ERR_INTERNAL_ERROR:     -5
+  ERR_TIMEOUT:            -6
+  ERR_USER_ERROR:         -7
+  ERR_UNSUPP_COMMAND:     -8
+  ERR_SERVICE_NOT_FOUND:  -9
+  ERR_LOCKED:            -10
+  ERR_NOT_STARTED:       -11
+
+# -----------------------------------------------------------------------------
+# XFS event classes (sub-types of XFS event delivery).
+# -----------------------------------------------------------------------------
+eventClasses:
+  - SRVE  # Service event
+  - USRE  # User event
+  - EXEE  # Execute event
+  - SYSE  # System event
+
+# -----------------------------------------------------------------------------
+# Per-service command + event tables. Payload shapes stay hand-written in the
+# corresponding packages/xfs-core/src/<service>.ts files for Phase 2; the spec
+# carries them in commentary for documentation, with full payload codegen
+# scheduled for Phase 8 alongside C++ codegen.
+# -----------------------------------------------------------------------------
+services:
+
+  # ---------------------------------------------------------------------------
+  IDC:
+    description: Identification Card (card reader). Motor / DIP / contactless.
+    hServiceDefault: IDC30
+    commands:
+      READ_RAW_DATA:        WFS_CMD_IDC_READ_RAW_DATA
+      READ_TRACK:           WFS_CMD_IDC_READ_TRACK
+      WRITE_TRACK:          WFS_CMD_IDC_WRITE_TRACK
+      EJECT_CARD:           WFS_CMD_IDC_EJECT_CARD
+      RETAIN_CARD:          WFS_CMD_IDC_RETAIN_CARD
+      RESET_COUNT:          WFS_CMD_IDC_RESET_COUNT
+      RESET:                WFS_CMD_IDC_RESET
+      CHIP_IO:              WFS_CMD_IDC_CHIP_IO
+      CHIP_POWER:           WFS_CMD_IDC_CHIP_POWER
+    events:
+      MEDIA_INSERTED:
+        code: WFS_SRVE_IDC_MEDIAINSERTED
+        class: SRVE
+      MEDIA_REMOVED:
+        code: WFS_SRVE_IDC_MEDIAREMOVED
+        class: SRVE
+      MEDIA_RETAINED:
+        code: WFS_SRVE_IDC_MEDIARETAINED
+        class: SRVE
+      INVALID_TRACK_DATA:
+        code: WFS_EXEE_IDC_INVALIDTRACKDATA
+        class: EXEE
+      INVALID_MEDIA:
+        code: WFS_EXEE_IDC_INVALIDMEDIA
+        class: EXEE
+
+  # ---------------------------------------------------------------------------
+  PIN:
+    description: PIN Pad / Encrypting PIN Pad (EPP). Captures PINs, derives PIN blocks.
+    hServiceDefault: PIN30
+    commands:
+      GET_PIN:              WFS_CMD_PIN_GET_PIN
+      GET_PINBLOCK:         WFS_CMD_PIN_GET_PINBLOCK
+      GET_DATA:             WFS_CMD_PIN_GET_DATA
+      RESET:                WFS_CMD_PIN_RESET
+      IMPORT_KEY:           WFS_CMD_PIN_IMPORT_KEY
+      GET_KEY_DETAIL:       WFS_CMD_PIN_GET_KEY_DETAIL
+    events:
+      KEY:
+        code: WFS_EXEE_PIN_KEY
+        class: EXEE
+      ENTER_DATA:
+        code: WFS_EXEE_PIN_ENTERDATA
+        class: EXEE
+      DATA_READY:
+        code: WFS_EXEE_PIN_DATAREADY
+        class: EXEE
+
+  # ---------------------------------------------------------------------------
+  CDM:
+    description: Cash Dispenser Module. Cassettes, denomination mix, present/retract.
+    hServiceDefault: CDM30
+    commands:
+      DISPENSE:             WFS_CMD_CDM_DISPENSE
+      PRESENT:              WFS_CMD_CDM_PRESENT
+      REJECT:               WFS_CMD_CDM_REJECT
+      RETRACT:              WFS_CMD_CDM_RETRACT
+      COUNT:                WFS_CMD_CDM_COUNT
+      CASH_UNIT_INFO:       WFS_CMD_CDM_CASH_UNIT_INFO
+      START_EXCHANGE:       WFS_CMD_CDM_START_EXCHANGE
+      END_EXCHANGE:         WFS_CMD_CDM_END_EXCHANGE
+      RESET:                WFS_CMD_CDM_RESET
+    events:
+      CASH_UNIT_THRESHOLD:
+        code: WFS_SRVE_CDM_CASHUNITTHRESHOLD
+        class: SRVE
+      SAFE_DOOR_OPEN:
+        code: WFS_SRVE_CDM_SAFEDOOROPEN
+        class: SRVE
+      SAFE_DOOR_CLOSED:
+        code: WFS_SRVE_CDM_SAFEDOORCLOSED
+        class: SRVE
+      NOTES_PRESENTED:
+        code: WFS_EXEE_CDM_NOTESPRESENTED
+        class: EXEE
+      NOTES_TAKEN:
+        code: WFS_SRVE_CDM_ITEMSTAKEN
+        class: SRVE
+      JAM:
+        code: WFS_SRVE_CDM_MEDIADETECTED
+        class: SRVE
+      EXCHANGE_STATE_CHANGED:
+        code: WFS_SRVE_CDM_EXCHANGESTATECHANGED
+        class: SRVE
+
+  # ---------------------------------------------------------------------------
+  PTR:
+    description: Printer (receipt + journal). Thermal / inkjet / impact.
+    hServiceDefault: PTR30
+    commands:
+      PRINT_FORM:           WFS_CMD_PTR_PRINT_FORM
+      RAW_DATA:             WFS_CMD_PTR_RAW_DATA
+      CUT_PAPER:            WFS_CMD_PTR_CUT_PAPER
+      RESET:                WFS_CMD_PTR_RESET
+    events:
+      PAPER_THRESHOLD:
+        code: WFS_SRVE_PTR_PAPERTHRESHOLD
+        class: SRVE
+      MEDIA_PRESENTED:
+        code: WFS_SRVE_PTR_MEDIAPRESENTED
+        class: SRVE
+      MEDIA_TAKEN:
+        code: WFS_SRVE_PTR_MEDIATAKEN
+        class: SRVE
+
+  # ---------------------------------------------------------------------------
+  SIU:
+    description: Sensors & Indicators Unit. Cabinet/safe doors, tamper, LEDs, supervisor key.
+    hServiceDefault: SIU30
+    commands:
+      ENABLE_EVENTS:        WFS_CMD_SIU_ENABLE_EVENTS
+      DISABLE_EVENTS:       WFS_CMD_SIU_DISABLE_EVENTS
+      SET_INDICATOR:        WFS_CMD_SIU_SET_INDICATOR
+      GET_SENSOR_STATUS:    WFS_CMD_SIU_GET_SENSOR_STATUS
+      RESET:                WFS_CMD_SIU_RESET
+    events:
+      PORT_STATUS:
+        code: WFS_SRVE_SIU_PORT_STATUS
+        class: SRVE
+      CABINET_STATUS:
+        code: WFS_USRE_SIU_CABINET_STATUS
+        class: USRE
+      SAFE_DOOR:
+        code: WFS_USRE_SIU_SAFE_DOOR
+        class: USRE
+      TAMPER_SENSOR:
+        code: WFS_USRE_SIU_TAMPER_SENSOR
+        class: USRE
+      OPERATOR_SWITCH:
+        code: WFS_USRE_SIU_OPERATOR_SWITCH
+        class: USRE

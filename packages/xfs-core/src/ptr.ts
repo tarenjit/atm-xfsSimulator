@@ -1,21 +1,18 @@
-/** PTR (Printer) command and event contracts. */
+/** PTR (Printer) command and event contracts.
+ *
+ * Command + event constants are spec-driven (Architecture_v3.md §4.4) — they
+ * come from spec/xfs-contract.yaml via the generator. Payload-shape
+ * interfaces below are hand-written.
+ */
 
-export const PTR_CMD = {
-  PRINT_FORM: 'WFS_CMD_PTR_PRINT_FORM',
-  RAW_DATA: 'WFS_CMD_PTR_RAW_DATA',
-  CUT_PAPER: 'WFS_CMD_PTR_CUT_PAPER',
-  RESET: 'WFS_CMD_PTR_RESET',
-} as const;
-
-export type PtrCommandCode = (typeof PTR_CMD)[keyof typeof PTR_CMD];
-
-export const PTR_EVT = {
-  PAPER_THRESHOLD: 'WFS_SRVE_PTR_PAPERTHRESHOLD',
-  MEDIA_PRESENTED: 'WFS_SRVE_PTR_MEDIAPRESENTED',
-  MEDIA_TAKEN: 'WFS_SRVE_PTR_MEDIATAKEN',
-} as const;
-
-export type PtrEventCode = (typeof PTR_EVT)[keyof typeof PTR_EVT];
+export {
+  PTR_CMD,
+  PTR_EVT,
+  PTR_EVT_CLASS,
+  PTR_HSERVICE_DEFAULT,
+  type PtrCommandCode,
+  type PtrEventCode,
+} from './generated/ptr';
 
 export type PtrFormName = 'RECEIPT' | 'JOURNAL' | 'STATEMENT';
 export type PtrMediaType = 'RECEIPT' | 'JOURNAL';
